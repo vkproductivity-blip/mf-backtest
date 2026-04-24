@@ -17,6 +17,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = str(BASE_DIR / "mfdata.sqlite3")
 SCHEME_SEARCH_CACHE: List[Dict[str, Any]] = []
 SCHEME_CACHE_LOCK = Lock()
+SCHEME_BOOTSTRAP_LOCK = Lock()
 
 
 def get_allowed_origins() -> List[str]:
@@ -98,6 +99,28 @@ def refresh_scheme_search_cache() -> int:
         SCHEME_SEARCH_CACHE.extend(cache_rows)
 
     return len(cache_rows)
+
+
+def ensure_scheme_search_cache() -> int:
+    with SCHEME_CACHE_LOCK:
+        cached_count = len(SCHEME_SEARCH_CACHE)
+    if cached_count:
+        return cached_count
+
+    cached_count = refresh_scheme_search_cache()
+    if cached_count:
+        return cached_count
+
+    with SCHEME_BOOTSTRAP_LOCK:
+        with SCHEME_CACHE_LOCK:
+            cached_count = len(SCHEME_SEARCH_CACHE)
+        if cached_count:
+            return cached_count
+
+        # Railway containers can restart with a fresh ephemeral filesystem.
+        # If the local SQLite DB is empty, rebuild the scheme catalog from MFAPI.
+        sync_all_schemes(limit=None, sleep_s=0.0)
+        return refresh_scheme_search_cache()
 
 
 def upsert_scheme(conn: sqlite3.Connection, scheme_code: int, scheme_name: str) -> None:
@@ -507,13 +530,9 @@ def search_schemes(q: str):
         return []
 
     query = q.strip().lower()
+    ensure_scheme_search_cache()
     with SCHEME_CACHE_LOCK:
         cache_snapshot = list(SCHEME_SEARCH_CACHE)
-
-    if not cache_snapshot:
-        refresh_scheme_search_cache()
-        with SCHEME_CACHE_LOCK:
-            cache_snapshot = list(SCHEME_SEARCH_CACHE)
 
     starts_with_code = []
     starts_with_name = []
