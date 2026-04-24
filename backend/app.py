@@ -445,7 +445,9 @@ def health():
     return {"ok": True}
 
 
-@app.get("/api/schemes/search")
+@app.get("/")
+def root():
+    return {"message": "MF Backtest API", "health": "/health", "schemes": "/api/schemes/search"}
 def search_schemes(q: str):
     """Search schemes by code or name - used by frontend autocomplete"""
     if not q or len(q) < 1:
@@ -860,32 +862,6 @@ def api_analyze_correlation(req: AnalysisRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
-
-
-# ----------------------------
-# STATIC FILE MOUNTING (AFTER API ROUTES)
-# ----------------------------
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import os
-
-# Get the parent directory (MF_Backtest root)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
-FRONTEND_OUT_DIR = os.path.join(FRONTEND_DIR, "out")
-
-# Mount static files AFTER API routes are defined
-if os.path.isdir(FRONTEND_OUT_DIR):
-    app.mount("/_next", StaticFiles(directory=os.path.join(FRONTEND_OUT_DIR, "_next")), name="next")
-    app.mount("/", StaticFiles(directory=FRONTEND_OUT_DIR, html=True), name="frontend")
-else:
-    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-
-@app.get("/")
-def index():
-    if os.path.isdir(FRONTEND_OUT_DIR):
-        return FileResponse(os.path.join(FRONTEND_OUT_DIR, "index.html"))
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
 # ----------------------------
