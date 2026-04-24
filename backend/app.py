@@ -643,6 +643,16 @@ def api_sync_schemes(limit: int = 100, sleep_s: float = 0.1):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/admin/sync/schemes")
+def api_sync_schemes_get(limit: int = 100, sleep_s: float = 0.1):
+    # Browser-friendly trigger for first-time dataset bootstrapping.
+    try:
+        n = sync_all_schemes(limit=limit, sleep_s=sleep_s)
+        return {"inserted_or_updated": n}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/admin/sync/latest")
 def api_sync_latest(sleep_s: float = 0.15):
     # NOTE: This can be long; best run via CLI in production.
