@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MF Backtest | Mutual Fund Backtester</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 MF Backtest</h1>
+            <p class="subtitle">Professional Mutual Fund Backtesting Platform</p>
+        </header>
+
+        <div id="errorMessage" class="error-message"></div>
+        <div id="successMessage" class="success-message"></div>
+
+        <div class="main-grid">
+            <!-- Left Panel: Input Form -->
+            <div class="card">
+                <h2 style="margin-bottom: 20px; color: #64c8ff;">Backtest Parameters</h2>
+                
+                <div class="form-group">
+                    <label for="schemeCode">Mutual Fund Scheme</label>
+                    <input type="text" id="schemeCode" placeholder="Search scheme or enter code..." autocomplete="off">
+                    <div class="scheme-search-results" id="schemeResults"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="startDate">Start Date</label>
+                    <input type="date" id="startDate">
+                </div>
+
+                <div class="form-group">
+                    <label for="endDate">End Date</label>
+                    <input type="date" id="endDate">
+                </div>
+
+                <div class="form-group">
+                    <label for="investmentAmount">Investment Amount (₹)</label>
+                    <input type="number" id="investmentAmount" placeholder="100000" value="100000" min="0" step="1000">
+                </div>
+
+                <div class="form-group">
+                    <label for="investmentType">Investment Type</label>
+                    <select id="investmentType">
+                        <option value="lump-sum">Lump Sum</option>
+                        <option value="sip">SIP (Systematic Investment Plan)</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="sipAmountGroup" style="display: none;">
+                    <label for="sipAmount">Monthly SIP Amount (₹)</label>
+                    <input type="number" id="sipAmount" placeholder="5000" value="5000" min="0" step="500">
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-primary" onclick="runBacktest()">Run Backtest</button>
+                    <button class="btn-secondary" onclick="resetForm()">Reset</button>
+                </div>
+
+                <div id="loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Running backtest...</p>
+                </div>
+            </div>
+
+            <!-- Right Panel: Results Summary -->
+            <div class="card">
+                <h2 style="margin-bottom: 20px; color: #64c8ff;">Results Summary</h2>
+                
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Total Return</div>
+                        <div class="metric-value" id="totalReturn">-</div>
+                        <div class="metric-change" id="totalReturnPct">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Final Value</div>
+                        <div class="metric-value" id="finalValue">-</div>
+                        <div class="metric-change" id="profitLoss">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">CAGR</div>
+                        <div class="metric-value" id="cagr">-</div>
+                        <div class="metric-change" id="cagrStatus">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Max Drawdown</div>
+                        <div class="metric-value" id="maxDrawdown">-</div>
+                        <div class="metric-change negative">Risk Metric</div>
+                    </div>
+                </div>
+
+                <div style="background: rgba(100, 200, 255, 0.05); padding: 15px; border-radius: 8px; margin-top: 15px;">
+                    <div style="margin-bottom: 10px;">
+                        <strong style="color: #64c8ff;">Scheme Name:</strong>
+                        <span id="schemeName" style="color: #e0e0e0;">-</span>
+                    </div>
+                    <div>
+                        <strong style="color: #64c8ff;">Period:</strong>
+                        <span id="period" style="color: #e0e0e0;">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="charts-grid">
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #64c8ff;">Portfolio Growth</h3>
+                <div class="chart-container">
+                    <canvas id="portfolioChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #64c8ff;">Daily Returns</h3>
+                <div class="chart-container">
+                    <canvas id="returnsChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Additional Metrics -->
+        <div class="card">
+            <h2 style="margin-bottom: 20px; color: #64c8ff;">Detailed Metrics</h2>
+            
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('statistics')">Statistics</button>
+                <button class="tab" onclick="switchTab('riskMetrics')">Risk Metrics</button>
+                <button class="tab" onclick="switchTab('performance')">Performance</button>
+            </div>
+
+            <div id="statistics" class="tab-content active">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statisticsTable">
+                        <tr>
+                            <td colspan="2" style="text-align: center; color: #888;">Run a backtest to see statistics</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="riskMetrics" class="tab-content">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody id="riskTable">
+                        <tr>
+                            <td colspan="2" style="text-align: center; color: #888;">Run a backtest to see risk metrics</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="performance" class="tab-content">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody id="performanceTable">
+                        <tr>
+                            <td colspan="2" style="text-align: center; color: #888;">Run a backtest to see performance data</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

@@ -1,0 +1,325 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 40px;
+    padding: 30px 0;
+    border-bottom: 2px solid rgba(100, 200, 255, 0.3);
+}
+
+h1 {
+    font-size: 2.5em;
+    background: linear-gradient(135deg, #64c8ff, #00d4ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 10px;
+}
+
+.subtitle {
+    color: #a0a0a0;
+    font-size: 1.1em;
+}
+
+.main-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 30px;
+    margin-bottom: 30px;
+}
+
+.card {
+    background: rgba(30, 30, 50, 0.8);
+    border: 1px solid rgba(100, 200, 255, 0.2);
+    border-radius: 12px;
+    padding: 25px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    border-color: rgba(100, 200, 255, 0.5);
+    box-shadow: 0 12px 40px rgba(100, 200, 255, 0.15);
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    color: #64c8ff;
+    font-weight: 500;
+    font-size: 0.95em;
+}
+
+input, select {
+    width: 100%;
+    padding: 12px;
+    background: rgba(10, 10, 30, 0.6);
+    border: 1px solid rgba(100, 200, 255, 0.2);
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 1em;
+    transition: all 0.3s ease;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: #64c8ff;
+    box-shadow: 0 0 10px rgba(100, 200, 255, 0.2);
+    background: rgba(10, 10, 30, 0.8);
+}
+
+input::placeholder {
+    color: #666;
+}
+
+.button-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 25px;
+}
+
+button {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #64c8ff, #00d4ff);
+    color: #0f0c29;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(100, 200, 255, 0.3);
+}
+
+.btn-secondary {
+    background: rgba(100, 200, 255, 0.1);
+    color: #64c8ff;
+    border: 1px solid #64c8ff;
+}
+
+.btn-secondary:hover {
+    background: rgba(100, 200, 255, 0.2);
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.metric-card {
+    background: rgba(20, 20, 40, 0.9);
+    border: 1px solid rgba(100, 200, 255, 0.2);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+}
+
+.metric-label {
+    color: #888;
+    font-size: 0.85em;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.metric-value {
+    font-size: 1.8em;
+    font-weight: bold;
+    color: #64c8ff;
+    margin-bottom: 5px;
+}
+
+.metric-change {
+    font-size: 0.9em;
+    color: #00d4ff;
+}
+
+.metric-change.negative {
+    color: #ff6b6b;
+}
+
+.charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-bottom: 30px;
+}
+
+.chart-container {
+    position: relative;
+    height: 350px;
+}
+
+.loading {
+    display: none;
+    text-align: center;
+    padding: 20px;
+    color: #64c8ff;
+}
+
+.spinner {
+    border: 4px solid rgba(100, 200, 255, 0.2);
+    border-top: 4px solid #64c8ff;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 15px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-message {
+    background: rgba(255, 107, 107, 0.1);
+    border: 1px solid #ff6b6b;
+    color: #ff9999;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: none;
+}
+
+.success-message {
+    background: rgba(100, 200, 255, 0.1);
+    border: 1px solid #64c8ff;
+    color: #64c8ff;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: none;
+}
+
+.comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+.comparison-table th {
+    background: rgba(100, 200, 255, 0.1);
+    padding: 12px;
+    text-align: left;
+    border-bottom: 2px solid rgba(100, 200, 255, 0.2);
+    color: #64c8ff;
+}
+
+.comparison-table td {
+    padding: 12px;
+    border-bottom: 1px solid rgba(100, 200, 255, 0.1);
+}
+
+.comparison-table tr:hover {
+    background: rgba(100, 200, 255, 0.05);
+}
+
+@media (max-width: 768px) {
+    .main-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+
+    h1 {
+        font-size: 1.8em;
+    }
+}
+
+.scheme-search-results {
+    background: rgba(10, 10, 30, 0.8);
+    border: 1px solid rgba(100, 200, 255, 0.2);
+    border-radius: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    position: absolute;
+    width: 100%;
+    top: 100%;
+    z-index: 100;
+    margin-top: 5px;
+    display: none;
+}
+
+.scheme-option {
+    padding: 12px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(100, 200, 255, 0.1);
+    transition: all 0.2s ease;
+}
+
+.scheme-option:hover {
+    background: rgba(100, 200, 255, 0.1);
+    padding-left: 16px;
+}
+
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid rgba(100, 200, 255, 0.1);
+}
+
+.tab {
+    padding: 12px 20px;
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.tab.active {
+    color: #64c8ff;
+    border-bottom-color: #64c8ff;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
