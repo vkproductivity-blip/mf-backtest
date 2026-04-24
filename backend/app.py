@@ -1,4 +1,3 @@
-import argparse
 import sqlite3
 import time
 from datetime import datetime, date, timedelta
@@ -8,7 +7,6 @@ import numpy as np
 import requests
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
-import uvicorn
 
 BASE_URL = "https://api.mfapi.in"  # MFAPI base URL (no auth needed)
 
@@ -863,44 +861,3 @@ def api_analyze_correlation(req: AnalysisRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
-
-# ----------------------------
-# CLI entrypoints (recommended for long sync jobs)
-# ----------------------------
-def main():
-    parser = argparse.ArgumentParser()
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    serve = sub.add_parser("serve")
-    serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8000)
-
-    ss = sub.add_parser("sync-schemes")
-    ss.add_argument("--limit", type=int, default=100)
-    ss.add_argument("--sleep", type=float, default=0.1)
-
-    sl = sub.add_parser("sync-latest")
-    sl.add_argument("--sleep", type=float, default=0.15)
-
-    sh = sub.add_parser("sync-history")
-    sh.add_argument("--scheme-code", type=int, required=True)
-    sh.add_argument("--startDate", default=None)
-    sh.add_argument("--endDate", default=None)
-
-    args = parser.parse_args()
-
-    if args.cmd == "serve":
-        uvicorn.run(app, host=args.host, port=args.port)
-    elif args.cmd == "sync-schemes":
-        n = sync_all_schemes()
-        print(f"schemes upserted: {n}")
-    elif args.cmd == "sync-latest":
-        n = sync_latest_for_all_schemes(sleep_s=args.sleep)
-        print(f"latest nav rows upserted: {n}")
-    elif args.cmd == "sync-history":
-        n = sync_history_for_scheme(args.scheme_code, args.startDate, args.endDate)
-        print(f"history nav rows upserted: {n}")
-
-
-if __name__ == "__main__":
-    main()
