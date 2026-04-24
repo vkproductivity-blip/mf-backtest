@@ -4,6 +4,7 @@ import sqlite3
 import time
 from datetime import datetime, date, timedelta
 from pathlib import Path
+from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
@@ -14,6 +15,8 @@ from pydantic import BaseModel
 BASE_URL = "https://api.mfapi.in"  # MFAPI base URL (no auth needed)
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = str(BASE_DIR / "mfdata.sqlite3")
+SCHEME_SEARCH_CACHE: List[Dict[str, Any]] = []
+SCHEME_CACHE_LOCK = Lock()
 
 
 def get_allowed_origins() -> List[str]:
@@ -65,6 +68,36 @@ def db_init() -> None:
 
     conn.commit()
     conn.close()
+
+
+def refresh_scheme_search_cache() -> int:
+    conn = db_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT scheme_code, scheme_name
+        FROM schemes
+        ORDER BY scheme_name;
+        """
+    )
+    rows = cur.fetchall()
+    conn.close()
+
+    cache_rows = [
+        {
+            "scheme_code": int(r["scheme_code"]),
+            "scheme_name": str(r["scheme_name"]),
+            "scheme_name_lc": str(r["scheme_name"]).lower(),
+            "scheme_code_str": str(r["scheme_code"]),
+        }
+        for r in rows
+    ]
+
+    with SCHEME_CACHE_LOCK:
+        SCHEME_SEARCH_CACHE.clear()
+        SCHEME_SEARCH_CACHE.extend(cache_rows)
+
+    return len(cache_rows)
 
 
 def upsert_scheme(conn: sqlite3.Connection, scheme_code: int, scheme_name: str) -> None:
@@ -141,6 +174,7 @@ def sync_all_schemes(limit: Optional[int] = None, sleep_s: float = 0.15) -> int:
                 conn.commit()
     conn.commit()
     conn.close()
+    refresh_scheme_search_cache()
     return count
 
 
@@ -421,6 +455,7 @@ def comprehensive_backtest(
 # FastAPI app (your backend API)
 # ----------------------------
 db_init()
+refresh_scheme_search_cache()
 app = FastAPI(title="MFAPI Backtesting Backend (SQLite cache)")
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
@@ -470,25 +505,42 @@ def search_schemes(q: str):
     """Search schemes by code or name - used by frontend autocomplete"""
     if not q or len(q) < 1:
         return []
-    
-    conn = db_conn()
-    cur = conn.cursor()
-    
-    # Search by both scheme_code and scheme_name
-    cur.execute(
-        """
-        SELECT scheme_code, scheme_name
-        FROM schemes
-        WHERE scheme_code LIKE ? OR scheme_name LIKE ?
-        ORDER BY scheme_name
-        LIMIT 20
-        """,
-        (f"{q}%", f"%{q}%")
-    )
-    
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
-    return rows
+
+    query = q.strip().lower()
+    with SCHEME_CACHE_LOCK:
+        cache_snapshot = list(SCHEME_SEARCH_CACHE)
+
+    if not cache_snapshot:
+        refresh_scheme_search_cache()
+        with SCHEME_CACHE_LOCK:
+            cache_snapshot = list(SCHEME_SEARCH_CACHE)
+
+    starts_with_code = []
+    starts_with_name = []
+    contains_name = []
+
+    for item in cache_snapshot:
+        if item["scheme_code_str"].startswith(query):
+            starts_with_code.append(item)
+        elif item["scheme_name_lc"].startswith(query):
+            starts_with_name.append(item)
+        elif query in item["scheme_name_lc"]:
+            contains_name.append(item)
+
+        if len(starts_with_code) + len(starts_with_name) + len(contains_name) >= 20:
+            if len(starts_with_code) >= 20:
+                break
+            if len(starts_with_code) + len(starts_with_name) >= 20 and not contains_name:
+                break
+
+    rows = (starts_with_code + starts_with_name + contains_name)[:20]
+    return [
+        {
+            "scheme_code": row["scheme_code"],
+            "scheme_name": row["scheme_name"],
+        }
+        for row in rows
+    ]
 
 
 class BacktestRequest(BaseModel):
