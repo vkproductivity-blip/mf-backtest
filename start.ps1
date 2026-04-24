@@ -1,25 +1,16 @@
-# MF Backtest - One-Click Launcher
-# Run this script to start the entire application
+# MF Backtest local launcher
 
-Write-Host "`n========================================" -ForegroundColor Cyan
-Write-Host "  MF BACKTEST - Mutual Fund Backtester" -ForegroundColor Cyan
-Write-Host "========================================`n" -ForegroundColor Cyan
-
-$ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$VenvPath = Join-Path $ProjectRoot "venv\Scripts\Activate.ps1"
-$BackendPath = Join-Path $ProjectRoot "backend"
-
-# Activate virtual environment
-Write-Host "Activating Python virtual environment..." -ForegroundColor Yellow
-& $VenvPath
-
-# Navigate to backend
-Set-Location $BackendPath
-
-# Start the server
-Write-Host "`nStarting MF Backtest backend server..." -ForegroundColor Green
-Write-Host "Opening: http://localhost:8000" -ForegroundColor Green
-Write-Host "Press CTRL+C to stop the server`n" -ForegroundColor Yellow
-
-# Start the backend
-python app.py serve --host 0.0.0.0 --port 8000
+Write-Host ""
+Write-Host "MF Backtest local setup" -ForegroundColor Cyan
+Write-Host "1. Start the backend from backend/" -ForegroundColor Yellow
+Write-Host "2. Start the frontend from frontend/ with NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Backend command:" -ForegroundColor Green
+Write-Host "  cd backend" -ForegroundColor White
+Write-Host "  uvicorn app:app --host 127.0.0.1 --port 8000" -ForegroundColor White
+Write-Host ""
+Write-Host "Frontend command:" -ForegroundColor Green
+Write-Host "  cd frontend" -ForegroundColor White
+Write-Host "  `$env:NEXT_PUBLIC_API_BASE_URL='http://127.0.0.1:8000'" -ForegroundColor White
+Write-Host "  npm install" -ForegroundColor White
+Write-Host "  npm run dev" -ForegroundColor White

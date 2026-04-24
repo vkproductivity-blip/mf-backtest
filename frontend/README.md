@@ -1,23 +1,24 @@
-# MF Backtest Frontend
+# Frontend
 
-This frontend is built with Next.js and provides an interactive mutual fund backtesting experience.
+This is the deployable Vercel frontend for MF Backtest.
 
-## Setup
+## Environment variable
 
-1. Open a terminal in `frontend/`
-2. Run `npm install`
-3. Copy `.env.example` to `.env.local` and update `NEXT_PUBLIC_API_BASE_URL` if needed.
-4. Run the backend on port `8000`.
-5. Run `npm run dev`
+Set this in Vercel:
 
-## Production-ready deployment
+```text
+NEXT_PUBLIC_API_BASE_URL=https://your-railway-domain.up.railway.app
+```
 
-- Build the Next.js app with `npm run build`
-- Export static files with `npm run export`
-- If you want the backend to serve the static site, put the generated `out/` folder in `frontend/` and start the backend app.
+## Local development
+
+```powershell
+$env:NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:8000"
+npm install
+npm run dev
+```
 
 ## Notes
 
-- When `NEXT_PUBLIC_API_BASE_URL` is unset, the frontend will use relative API paths like `/api/backtest`.
-- The backend API endpoints used by the app are `/api/schemes/search` and `/api/backtest`.
-- The app uses Vanta.js for a matte black animated background.
+- The active UI entrypoint is `pages/index.js`.
+- The old plain HTML frontend assets are no longer part of the deployable path.

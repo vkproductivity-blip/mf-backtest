@@ -18,16 +18,16 @@ import PopularFundsSidebar from '../components/PopularFundsSidebar';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip, Legend, Filler);
 
 const VantaBackground = dynamic(() => import('../components/VantaBackground'), { ssr: false });
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || '').replace(/\/$/, '');
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(Number(value || 0));
 
-const formatPercent = (value) => `${(value * 100).toFixed(2)}%`;
+const formatPercent = (value) => `${(Number(value || 0) * 100).toFixed(2)}%`;
 
 const defaultStats = {
   schemeCode: '',
@@ -37,6 +37,13 @@ const defaultStats = {
   investmentType: 'lump-sum',
   investmentAmount: 100000,
   sipAmount: 5000,
+};
+
+const buildApiUrl = (path) => {
+  if (!API_BASE) {
+    return path;
+  }
+  return `${API_BASE}${path}`;
 };
 
 export default function Home() {
@@ -73,7 +80,7 @@ export default function Home() {
 
     searchTimer.current = setTimeout(async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/schemes/search?q=${encodeURIComponent(schemeQuery)}`);
+        const response = await fetch(buildApiUrl(`/api/schemes/search?q=${encodeURIComponent(schemeQuery)}`));
         if (!response.ok) {
           throw new Error('Unable to search schemes');
         }
@@ -81,19 +88,20 @@ export default function Home() {
         setSearchResults(results.slice(0, 10));
       } catch (error) {
         console.error(error);
+        setSearchResults([]);
       }
     }, 300);
 
     return () => clearTimeout(searchTimer.current);
   }, [schemeQuery]);
 
-  const selectedScheme = (scheme_code, scheme_name) => {
+  const selectedScheme = (schemeCode, schemeName) => {
     setForm((current) => ({
       ...current,
-      schemeCode: scheme_code.toString(),
-      schemeName: scheme_name,
+      schemeCode: schemeCode.toString(),
+      schemeName,
     }));
-    setSchemeQuery(`${scheme_code} - ${scheme_name}`);
+    setSchemeQuery(`${schemeCode} - ${schemeName}`);
     setSearchResults([]);
     setShowSearch(false);
   };
@@ -157,7 +165,7 @@ export default function Home() {
     };
 
     try {
-      const response = await fetch(`${API_BASE}/api/backtest`, {
+      const response = await fetch(buildApiUrl('/api/backtest'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -178,7 +186,13 @@ export default function Home() {
   };
 
   const resetForm = () => {
-    setForm(defaultStats);
+    const today = new Date();
+    const oneYearAgo = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+    setForm({
+      ...defaultStats,
+      startDate: oneYearAgo.toISOString().slice(0, 10),
+      endDate: today.toISOString().slice(0, 10),
+    });
     setSchemeQuery('');
     setSearchResults([]);
     setBacktest(null);
@@ -187,11 +201,9 @@ export default function Home() {
 
   const summaryCards = useMemo(() => {
     if (!backtest) return [];
-    const invested = backtest.total_invested ?? 0;
-    const profit = backtest.final_value - invested;
     return [
       { label: 'Final Portfolio Value', value: formatCurrency(backtest.final_value), tone: 'neutral' },
-      { label: 'Total Invested', value: formatCurrency(invested), tone: 'subtle' },
+      { label: 'Total Invested', value: formatCurrency(backtest.total_invested), tone: 'subtle' },
       { label: 'Total Return', value: formatPercent(backtest.total_return), tone: backtest.total_return >= 0 ? 'positive' : 'negative' },
       { label: 'CAGR', value: formatPercent(backtest.cagr), tone: backtest.cagr >= 0 ? 'positive' : 'negative' },
     ];
@@ -210,10 +222,10 @@ export default function Home() {
     if (!backtest) return [];
     return [
       { label: 'Scheme', value: backtest.scheme_name },
-      { label: 'Period', value: `${new Date(backtest.start_date).toLocaleDateString()} → ${new Date(backtest.end_date).toLocaleDateString()}` },
+      { label: 'Period', value: `${new Date(backtest.start_date).toLocaleDateString()} -> ${new Date(backtest.end_date).toLocaleDateString()}` },
       { label: 'Investment Type', value: backtest.investment_type === 'sip' ? 'SIP' : 'Lump Sum' },
-      { label: 'Total Days', value: `${Math.max(0, new Date(backtest.end_date) - new Date(backtest.start_date)) / 86400000 | 0}` },
-      { label: 'Data points', value: backtest.nav_dates.length },
+      { label: 'Data Points', value: backtest.nav_dates.length },
+      { label: 'Trading Days', value: backtest.total_trading_days },
     ];
   }, [backtest]);
 
@@ -222,7 +234,7 @@ export default function Home() {
     return [
       { label: 'Max Drawdown', value: formatPercent(backtest.max_drawdown) },
       { label: 'Volatility', value: formatPercent(backtest.volatility) },
-      { label: 'Sharpe Ratio', value: backtest.sharpe_ratio.toFixed(2) },
+      { label: 'Sharpe Ratio', value: Number(backtest.sharpe_ratio || 0).toFixed(2) },
       { label: 'Positive Days', value: `${backtest.positive_days}/${backtest.total_trading_days}` },
     ];
   }, [backtest]);
@@ -233,15 +245,15 @@ export default function Home() {
       { label: 'Average Daily Return', value: formatPercent(backtest.avg_daily_return) },
       { label: 'Best Day', value: formatPercent(backtest.best_day_return) },
       { label: 'Worst Day', value: formatPercent(backtest.worst_day_return) },
-      { label: 'Final NAV', value: formatCurrency(backtest.final_value / (backtest.portfolio_values?.length || 1)) },
+      { label: 'Final Value', value: formatCurrency(backtest.final_value) },
     ];
   }, [backtest]);
 
   return (
     <>
       <Head>
-        <title>MF Backtest | Next.js Mutual Fund Backtester</title>
-        <meta name="description" content="Interactive mutual fund backtesting dashboard with matte Vanta black UI." />
+        <title>MF Backtest | Mutual Fund Backtester</title>
+        <meta name="description" content="Interactive mutual fund backtesting dashboard for public deployment on Vercel and Railway." />
       </Head>
 
       <div className="page-shell">
@@ -253,11 +265,17 @@ export default function Home() {
               <span className="eyebrow">Mutual Fund Backtester</span>
               <h1>MF Backtest</h1>
               <p className="hero-copy">
-                Explore scheme performance, compare SIP and lump-sum scenarios, and visualize risk metrics in a refined matte-black dashboard.
+                Explore scheme performance, compare SIP and lump-sum scenarios, and visualize risk metrics in a clean public dashboard.
               </p>
             </div>
-            <div className="hero-badge">Powered by Next.js + Vanta</div>
+            <div className="hero-badge">Vercel Frontend + Railway API</div>
           </header>
+
+          {!API_BASE && (
+            <div className="toast warning">
+              NEXT_PUBLIC_API_BASE_URL is not set. Local same-origin calls will work only if the frontend is reverse-proxied with the backend.
+            </div>
+          )}
 
           {message.text && (
             <div className={`toast ${message.type}`}>{message.text}</div>
@@ -268,7 +286,7 @@ export default function Home() {
               <div className="panel-heading">
                 <div>
                   <p className="panel-title">Backtest Parameters</p>
-                  <p className="panel-subtitle">Fast entry, intelligent results.</p>
+                  <p className="panel-subtitle">Search any scheme and run a backtest in seconds.</p>
                 </div>
                 <span className="chip">Interactive</span>
               </div>
@@ -340,7 +358,7 @@ export default function Home() {
               </div>
 
               <div className="hint-box">
-                <strong>Pro tip:</strong> Enter a scheme code and use the autocomplete results to avoid invalid codes.
+                <strong>Tip:</strong> pick a scheme from autocomplete so the public deployment always sends a valid scheme code.
               </div>
             </article>
 
@@ -348,9 +366,9 @@ export default function Home() {
               <div className="panel-heading">
                 <div>
                   <p className="panel-title">Live Summary</p>
-                  <p className="panel-subtitle">Results update after each run.</p>
+                  <p className="panel-subtitle">Results update after each successful run.</p>
                 </div>
-                <span className="badge">Matte</span>
+                <span className="badge">Public Ready</span>
               </div>
 
               <div className="metrics-grid">
@@ -371,7 +389,7 @@ export default function Home() {
                   <p className="info-label">Scheme</p>
                   <p>{backtest.scheme_name}</p>
                   <p className="info-label">Period</p>
-                  <p>{`${new Date(backtest.start_date).toLocaleDateString()} → ${new Date(backtest.end_date).toLocaleDateString()}`}</p>
+                  <p>{`${new Date(backtest.start_date).toLocaleDateString()} -> ${new Date(backtest.end_date).toLocaleDateString()}`}</p>
                 </div>
               )}
             </article>
@@ -398,11 +416,8 @@ export default function Home() {
                           backgroundColor: 'rgba(121, 192, 255, 0.18)',
                           fill: true,
                           tension: 0.35,
-                          pointRadius: 4,
-                          pointHoverRadius: 6,
-                          pointBackgroundColor: '#79c0ff',
-                          pointBorderColor: '#fff',
-                          pointBorderWidth: 2,
+                          pointRadius: 0,
+                          pointHoverRadius: 5,
                           borderWidth: 2,
                         },
                       ],
@@ -412,24 +427,10 @@ export default function Home() {
                       interaction: { mode: 'index', intersect: false },
                       plugins: {
                         legend: { labels: { color: '#cad6f0' } },
-                        tooltip: {
-                          enabled: true,
-                          backgroundColor: 'rgba(17, 22, 31, 0.95)',
-                          titleColor: '#79c0ff',
-                          bodyColor: '#e1e8ff',
-                          borderColor: 'rgba(121, 192, 255, 0.3)',
-                          borderWidth: 1,
-                          padding: 12,
-                          displayColors: false,
-                          callbacks: {
-                            title: (context) => `Date: ${context[0].label}`,
-                            label: (context) => `Value: ₹${(context.parsed.y).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
-                          },
-                        },
                       },
                       scales: {
                         x: { ticks: { color: '#a5b3cc' }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
-                        y: { ticks: { color: '#a5b3cc', callback: (value) => '₹' + (value / 100000).toFixed(1) + 'L' }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
+                        y: { ticks: { color: '#a5b3cc' }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
                       },
                     }}
                   />
@@ -440,7 +441,7 @@ export default function Home() {
                 <div className="panel-heading split">
                   <div>
                     <p className="panel-title">Daily Returns</p>
-                    <p className="panel-subtitle">Visualize upside and downside days.</p>
+                    <p className="panel-subtitle">See up days and down days quickly.</p>
                   </div>
                 </div>
                 <div className="chart-frame">
@@ -459,14 +460,6 @@ export default function Home() {
                       responsive: true,
                       plugins: {
                         legend: { display: false },
-                        tooltip: {
-                          backgroundColor: '#11161f',
-                          titleColor: '#79c0ff',
-                          bodyColor: '#e1e8ff',
-                          callbacks: {
-                            label: (context) => `${context.parsed.y.toFixed(2)}%`,
-                          },
-                        },
                       },
                       scales: {
                         x: { ticks: { color: '#a5b3cc' }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },

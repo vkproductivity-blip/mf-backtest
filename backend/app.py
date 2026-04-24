@@ -1,6 +1,9 @@
+import argparse
+import os
 import sqlite3
 import time
 from datetime import datetime, date, timedelta
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
@@ -9,8 +12,17 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 BASE_URL = "https://api.mfapi.in"  # MFAPI base URL (no auth needed)
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = str(BASE_DIR / "mfdata.sqlite3")
 
-DB_PATH = "mfdata.sqlite3"
+
+def get_allowed_origins() -> List[str]:
+    raw_origins = os.getenv("CORS_ALLOW_ORIGINS", "*").strip()
+    if not raw_origins:
+        return ["*"]
+    if raw_origins == "*":
+        return ["*"]
+    return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
 
 
 # ----------------------------
@@ -413,7 +425,7 @@ app = FastAPI(title="MFAPI Backtesting Backend (SQLite cache)")
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_allowed_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -445,7 +457,15 @@ def health():
 
 @app.get("/")
 def root():
-    return {"message": "MF Backtest API", "health": "/health", "schemes": "/api/schemes/search"}
+    return {
+        "message": "MF Backtest API",
+        "health": "/health",
+        "scheme_search": "/api/schemes/search",
+        "backtest": "/api/backtest",
+    }
+
+
+@app.get("/api/schemes/search")
 def search_schemes(q: str):
     """Search schemes by code or name - used by frontend autocomplete"""
     if not q or len(q) < 1:

@@ -1,67 +1,64 @@
 # MF Backtest
 
-Professional mutual fund backtesting platform built with Python FastAPI backend and Next.js interactive frontend.
+Mutual fund backtesting app with a FastAPI backend for Railway and a Next.js frontend for Vercel.
 
-## ⚡ Quick Start
+## Deployable Architecture
 
-### Option 1: PowerShell (Recommended)
-```powershell
-$env:PATH += ";C:\Program Files\nodejs"
-.\start.ps1
+- `backend/`: Railway service
+- `frontend/`: Vercel project
+
+## Railway Setup
+
+1. Deploy the repo root to Railway.
+2. Keep the provided `railway.json` start command.
+3. Optional: set `CORS_ALLOW_ORIGINS` to your Vercel domain and preview domains.
+
+Example:
+
+```text
+https://your-app.vercel.app,https://your-app-git-main-your-team.vercel.app
 ```
 
-### Option 2: Double-Click
-Run `start.bat` in Windows Explorer.
+4. After deploy, confirm:
 
-Then open: **http://localhost:8000**
+```text
+https://your-railway-domain.up.railway.app/health
+https://your-railway-domain.up.railway.app/api/schemes/search?q=hdfc
+```
 
----
+## Vercel Setup
 
-## 📦 What's Inside
+1. Import `frontend/` as the Vercel project root.
+2. Set:
 
-- **Backend**: FastAPI + SQLite with 37,500+ mutual fund schemes
-- **Frontend**: Next.js + React with Vanta animated background
-- **Features**:
-  - Scheme search with autocomplete
-  - Backtest simulator (lump-sum & SIP)
-  - Interactive charts and analytics
-  - Risk metrics (Sharpe, max drawdown, volatility)
-  - CAGR and performance tracking
+```text
+NEXT_PUBLIC_API_BASE_URL=https://your-railway-domain.up.railway.app
+```
 
----
+3. Redeploy.
 
-## 🚀 Development
+## Local Run
 
-The app is ready to run out-of-the-box. If you need to rebuild the frontend:
+Backend:
 
 ```powershell
-$env:PATH += ";C:\Program Files\nodejs"
+cd backend
+uvicorn app:app --host 127.0.0.1 --port 8000
+```
+
+Frontend:
+
+```powershell
 cd frontend
+$env:NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:8000"
 npm install
-npm run build
+npm run dev
 ```
 
----
+## Fixed in this revision
 
-## 📖 Full Deployment Guide
-
-See [DEPLOY.md](DEPLOY.md) for:
-- Troubleshooting
-- Cloud deployment
-- Advanced configuration
-
----
-
-## 🛠️ Tech Stack
-
-- **Backend**: Python 3.13, FastAPI, SQLite, NumPy
-- **Frontend**: Next.js 14, React 18, Chart.js, Vanta.js
-- **Data**: Free MFAPI (no auth required)
-
----
-
-## ⚙️ System Requirements
-
-- Python 3.13+
-- Node.js 18+ (for frontend development only)
-- Windows / Mac / Linux
+- Added the missing `/api/schemes/search` backend route.
+- Made SQLite load from the backend folder reliably on Railway.
+- Added configurable CORS for public frontend domains.
+- Restored a deployable Next.js frontend source tree.
+- Removed the broken Vercel rewrite/static-export setup.
