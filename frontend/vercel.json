@@ -4,11 +4,6 @@
   "env": {
     "NEXT_PUBLIC_API_BASE_URL": ""
   },
-  "functions": {
-    "api/**/*.ts": {
-      "maxDuration": 60
-    }
-  },
   "rewrites": [
     {
       "source": "/api/:path*",
