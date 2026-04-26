@@ -46,6 +46,29 @@ const buildApiUrl = (path) => {
   return `${API_BASE}${path}`;
 };
 
+const buildInvestedSeries = (backtest) => {
+  if (!backtest?.nav_dates?.length) {
+    return [];
+  }
+
+  if (backtest.investment_type === 'lump-sum') {
+    return backtest.nav_dates.map(() => Number(backtest.total_invested || 0));
+  }
+
+  let runningInvested = 0;
+  const seenMonths = new Set();
+
+  return backtest.nav_dates.map((dateString) => {
+    const date = new Date(dateString);
+    const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+    if (!seenMonths.has(monthKey)) {
+      seenMonths.add(monthKey);
+      runningInvested += Number(backtest.sip_amount || 0);
+    }
+    return runningInvested;
+  });
+};
+
 export default function Home() {
   const [form, setForm] = useState(defaultStats);
   const [searchResults, setSearchResults] = useState([]);
@@ -214,6 +237,7 @@ export default function Home() {
     return {
       labels: backtest.nav_dates.map((dateString) => new Date(dateString).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })),
       portfolio: backtest.portfolio_values,
+      invested: buildInvestedSeries(backtest),
       returns: backtest.daily_returns,
     };
   }, [backtest]);
@@ -259,7 +283,6 @@ export default function Home() {
       <div className="page-shell">
         <VantaBackground />
         <div className="page-frame">
-          <PopularFundsSidebar />
           <header className="hero-panel">
             <div>
               <span className="eyebrow">Mutual Fund Backtester</span>
@@ -281,219 +304,236 @@ export default function Home() {
             <div className={`toast ${message.type}`}>{message.text}</div>
           )}
 
-          <section className="grid-2-up">
-            <article className="glass-panel form-panel">
-              <div className="panel-heading">
-                <div>
-                  <p className="panel-title">Backtest Parameters</p>
-                  <p className="panel-subtitle">Search any scheme and run a backtest in seconds.</p>
-                </div>
-                <span className="chip">Interactive</span>
-              </div>
+          <div className="dashboard-layout">
+            <div className="dashboard-main">
+              <section className="grid-2-up">
+                <article className="glass-panel form-panel">
+                  <div className="panel-heading">
+                    <div>
+                      <p className="panel-title">Backtest Parameters</p>
+                      <p className="panel-subtitle">Search any scheme and run a backtest in seconds.</p>
+                    </div>
+                    <span className="chip">Interactive</span>
+                  </div>
 
-              <div className="field-group">
-                <label>Mutual Fund Scheme</label>
-                <input
-                  type="text"
-                  value={schemeQuery}
-                  onChange={(event) => handleInput('schemeCode', event.target.value)}
-                  placeholder="Search by scheme code or name"
-                  className="search-input"
-                />
-                {showSearch && searchResults.length > 0 && (
-                  <div className="search-dropdown">
-                    {searchResults.map((item) => (
+                  <div className="field-group">
+                    <label>Mutual Fund Scheme</label>
+                    <input
+                      type="text"
+                      value={schemeQuery}
+                      onChange={(event) => handleInput('schemeCode', event.target.value)}
+                      placeholder="Search by scheme code or name"
+                      className="search-input"
+                    />
+                    {showSearch && searchResults.length > 0 && (
+                      <div className="search-dropdown">
+                        {searchResults.map((item) => (
+                          <button
+                            key={item.scheme_code}
+                            type="button"
+                            className="search-item"
+                            onClick={() => selectedScheme(item.scheme_code, item.scheme_name)}
+                          >
+                            <span>{item.scheme_code}</span>
+                            <small>{item.scheme_name}</small>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="row-grid">
+                    <div className="field-group">
+                      <label>Start Date</label>
+                      <input type="date" value={form.startDate} onChange={(event) => handleInput('startDate', event.target.value)} />
+                    </div>
+                    <div className="field-group">
+                      <label>End Date</label>
+                      <input type="date" value={form.endDate} onChange={(event) => handleInput('endDate', event.target.value)} />
+                    </div>
+                  </div>
+
+                  <div className="row-grid">
+                    <div className="field-group">
+                      <label>Investment Type</label>
+                      <select value={form.investmentType} onChange={(event) => handleInput('investmentType', event.target.value)}>
+                        <option value="lump-sum">Lump Sum</option>
+                        <option value="sip">SIP</option>
+                      </select>
+                    </div>
+                    <div className="field-group">
+                      <label>{form.investmentType === 'sip' ? 'Monthly SIP Amount' : 'Lump Sum Amount'}</label>
+                      <input
+                        type="number"
+                        value={form.investmentType === 'sip' ? form.sipAmount : form.investmentAmount}
+                        onChange={(event) => handleInput(form.investmentType === 'sip' ? 'sipAmount' : 'investmentAmount', event.target.value)}
+                        min="100"
+                        step="100"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="button-row">
+                    <button className="btn btn-primary" onClick={runBacktest} disabled={loading}>
+                      {loading ? 'Running...' : 'Run Backtest'}
+                    </button>
+                    <button className="btn btn-secondary" onClick={resetForm} disabled={loading}>
+                      Reset
+                    </button>
+                  </div>
+
+                  <div className="hint-box">
+                    <strong>Tip:</strong> pick a scheme from autocomplete so the public deployment always sends a valid scheme code.
+                  </div>
+                </article>
+
+                <article className="glass-panel summary-panel">
+                  <div className="panel-heading">
+                    <div>
+                      <p className="panel-title">Live Summary</p>
+                      <p className="panel-subtitle">Results update after each successful run.</p>
+                    </div>
+                    <span className="badge">Public Ready</span>
+                  </div>
+
+                  <div className="metrics-grid">
+                    {summaryCards.length > 0 ? (
+                      summaryCards.map((card) => (
+                        <div key={card.label} className={`metric-card ${card.tone}`}>
+                          <p className="metric-label">{card.label}</p>
+                          <p className="metric-value">{card.value}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="empty-state">Run a backtest to see performance metrics instantly.</div>
+                    )}
+                  </div>
+
+                  {backtest && (
+                    <div className="info-block">
+                      <p className="info-label">Scheme</p>
+                      <p>{backtest.scheme_name}</p>
+                      <p className="info-label">Period</p>
+                      <p>{`${new Date(backtest.start_date).toLocaleDateString()} -> ${new Date(backtest.end_date).toLocaleDateString()}`}</p>
+                    </div>
+                  )}
+                </article>
+              </section>
+
+              {backtest && (
+                <section className="chart-section">
+                  <div className="glass-panel chart-card">
+                    <div className="panel-heading split">
+                      <div>
+                        <p className="panel-title">Portfolio Growth</p>
+                        <p className="panel-subtitle">Compare invested capital with actual portfolio value over time.</p>
+                      </div>
+                    </div>
+                    <div className="chart-frame">
+                      <Line
+                        data={{
+                          labels: chartData.labels,
+                          datasets: [
+                            {
+                              label: 'Portfolio Value',
+                              data: chartData.portfolio,
+                              borderColor: '#79c0ff',
+                              backgroundColor: 'rgba(121, 192, 255, 0.12)',
+                              fill: true,
+                              tension: 0.35,
+                              pointRadius: 0,
+                              pointHoverRadius: 5,
+                              borderWidth: 2,
+                            },
+                            {
+                              label: 'Invested Amount',
+                              data: chartData.invested,
+                              borderColor: '#ffbf69',
+                              borderDash: [8, 6],
+                              fill: false,
+                              tension: 0.2,
+                              pointRadius: 0,
+                              pointHoverRadius: 4,
+                              borderWidth: 2,
+                            },
+                          ],
+                        }}
+                        options={{
+                          responsive: true,
+                          interaction: { mode: 'index', intersect: false },
+                          plugins: {
+                            legend: { labels: { color: '#cad6f0' } },
+                          },
+                          scales: {
+                            x: { ticks: { color: '#a5b3cc', maxTicksLimit: 8 }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
+                            y: { ticks: { color: '#a5b3cc' }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
+                          },
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="glass-panel chart-card">
+                    <div className="panel-heading split">
+                      <div>
+                        <p className="panel-title">Daily Returns</p>
+                        <p className="panel-subtitle">See up days and down days quickly.</p>
+                      </div>
+                    </div>
+                    <div className="chart-frame">
+                      <Bar
+                        data={{
+                          labels: chartData.labels.slice(1),
+                          datasets: [
+                            {
+                              label: 'Daily Return',
+                              data: chartData.returns.map((value) => value * 100),
+                              backgroundColor: chartData.returns.map((value) => (value >= 0 ? '#78d9a4' : '#ff637d')),
+                            },
+                          ],
+                        }}
+                        options={{
+                          responsive: true,
+                          plugins: {
+                            legend: { display: false },
+                          },
+                          scales: {
+                            x: { ticks: { color: '#a5b3cc', maxTicksLimit: 8 }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
+                            y: { ticks: { color: '#a5b3cc', callback: (value) => `${value}%` }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
+                          },
+                        }}
+                      />
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {backtest && (
+                <section className="metric-tabs">
+                  <div className="tab-bar">
+                    {['statistics', 'risk', 'performance'].map((tab) => (
                       <button
-                        key={item.scheme_code}
+                        key={tab}
                         type="button"
-                        className="search-item"
-                        onClick={() => selectedScheme(item.scheme_code, item.scheme_name)}
+                        className={tab === activeTab ? 'tab active' : 'tab'}
+                        onClick={() => setActiveTab(tab)}
                       >
-                        <span>{item.scheme_code}</span>
-                        <small>{item.scheme_name}</small>
+                        {tab.toUpperCase()}
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
 
-              <div className="row-grid">
-                <div className="field-group">
-                  <label>Start Date</label>
-                  <input type="date" value={form.startDate} onChange={(event) => handleInput('startDate', event.target.value)} />
-                </div>
-                <div className="field-group">
-                  <label>End Date</label>
-                  <input type="date" value={form.endDate} onChange={(event) => handleInput('endDate', event.target.value)} />
-                </div>
-              </div>
-
-              <div className="row-grid">
-                <div className="field-group">
-                  <label>Investment Type</label>
-                  <select value={form.investmentType} onChange={(event) => handleInput('investmentType', event.target.value)}>
-                    <option value="lump-sum">Lump Sum</option>
-                    <option value="sip">SIP</option>
-                  </select>
-                </div>
-                <div className="field-group">
-                  <label>{form.investmentType === 'sip' ? 'Monthly SIP Amount' : 'Lump Sum Amount'}</label>
-                  <input
-                    type="number"
-                    value={form.investmentType === 'sip' ? form.sipAmount : form.investmentAmount}
-                    onChange={(event) => handleInput(form.investmentType === 'sip' ? 'sipAmount' : 'investmentAmount', event.target.value)}
-                    min="100"
-                    step="100"
-                  />
-                </div>
-              </div>
-
-              <div className="button-row">
-                <button className="btn btn-primary" onClick={runBacktest} disabled={loading}>
-                  {loading ? 'Running...' : 'Run Backtest'}
-                </button>
-                <button className="btn btn-secondary" onClick={resetForm} disabled={loading}>
-                  Reset
-                </button>
-              </div>
-
-              <div className="hint-box">
-                <strong>Tip:</strong> pick a scheme from autocomplete so the public deployment always sends a valid scheme code.
-              </div>
-            </article>
-
-            <article className="glass-panel summary-panel">
-              <div className="panel-heading">
-                <div>
-                  <p className="panel-title">Live Summary</p>
-                  <p className="panel-subtitle">Results update after each successful run.</p>
-                </div>
-                <span className="badge">Public Ready</span>
-              </div>
-
-              <div className="metrics-grid">
-                {summaryCards.length > 0 ? (
-                  summaryCards.map((card) => (
-                    <div key={card.label} className={`metric-card ${card.tone}`}>
-                      <p className="metric-label">{card.label}</p>
-                      <p className="metric-value">{card.value}</p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="empty-state">Run a backtest to see performance metrics instantly.</div>
-                )}
-              </div>
-
-              {backtest && (
-                <div className="info-block">
-                  <p className="info-label">Scheme</p>
-                  <p>{backtest.scheme_name}</p>
-                  <p className="info-label">Period</p>
-                  <p>{`${new Date(backtest.start_date).toLocaleDateString()} -> ${new Date(backtest.end_date).toLocaleDateString()}`}</p>
-                </div>
+                  <div className="tab-panel">
+                    {activeTab === 'statistics' && <MetricTable rows={statisticsRows} />}
+                    {activeTab === 'risk' && <MetricTable rows={riskRows} />}
+                    {activeTab === 'performance' && <MetricTable rows={performanceRows} />}
+                  </div>
+                </section>
               )}
-            </article>
-          </section>
+            </div>
 
-          {backtest && (
-            <section className="chart-section">
-              <div className="glass-panel chart-card">
-                <div className="panel-heading split">
-                  <div>
-                    <p className="panel-title">Portfolio Growth</p>
-                    <p className="panel-subtitle">Value evolution over time.</p>
-                  </div>
-                </div>
-                <div className="chart-frame">
-                  <Line
-                    data={{
-                      labels: chartData.labels,
-                      datasets: [
-                        {
-                          label: 'Portfolio Value',
-                          data: chartData.portfolio,
-                          borderColor: '#79c0ff',
-                          backgroundColor: 'rgba(121, 192, 255, 0.18)',
-                          fill: true,
-                          tension: 0.35,
-                          pointRadius: 0,
-                          pointHoverRadius: 5,
-                          borderWidth: 2,
-                        },
-                      ],
-                    }}
-                    options={{
-                      responsive: true,
-                      interaction: { mode: 'index', intersect: false },
-                      plugins: {
-                        legend: { labels: { color: '#cad6f0' } },
-                      },
-                      scales: {
-                        x: { ticks: { color: '#a5b3cc' }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
-                        y: { ticks: { color: '#a5b3cc' }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
-                      },
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="glass-panel chart-card">
-                <div className="panel-heading split">
-                  <div>
-                    <p className="panel-title">Daily Returns</p>
-                    <p className="panel-subtitle">See up days and down days quickly.</p>
-                  </div>
-                </div>
-                <div className="chart-frame">
-                  <Bar
-                    data={{
-                      labels: chartData.labels.slice(1),
-                      datasets: [
-                        {
-                          label: 'Daily Return',
-                          data: chartData.returns.map((value) => value * 100),
-                          backgroundColor: chartData.returns.map((value) => (value >= 0 ? '#78d9a4' : '#ff637d')),
-                        },
-                      ],
-                    }}
-                    options={{
-                      responsive: true,
-                      plugins: {
-                        legend: { display: false },
-                      },
-                      scales: {
-                        x: { ticks: { color: '#a5b3cc' }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
-                        y: { ticks: { color: '#a5b3cc', callback: (value) => `${value}%` }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
-                      },
-                    }}
-                  />
-                </div>
-              </div>
-            </section>
-          )}
-
-          {backtest && (
-            <section className="metric-tabs">
-              <div className="tab-bar">
-                {['statistics', 'risk', 'performance'].map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    className={tab === activeTab ? 'tab active' : 'tab'}
-                    onClick={() => setActiveTab(tab)}
-                  >
-                    {tab.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-
-              <div className="tab-panel">
-                {activeTab === 'statistics' && <MetricTable rows={statisticsRows} />}
-                {activeTab === 'risk' && <MetricTable rows={riskRows} />}
-                {activeTab === 'performance' && <MetricTable rows={performanceRows} />}
-              </div>
-            </section>
-          )}
+            <PopularFundsSidebar />
+          </div>
         </div>
       </div>
     </>

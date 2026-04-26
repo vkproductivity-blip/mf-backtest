@@ -8,6 +8,12 @@ export default function VantaBackground() {
   const vantaRef = useRef(null);
 
   useEffect(() => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const lowPowerLayout = window.innerWidth <= 1600;
+    if (reducedMotion || lowPowerLayout) {
+      return undefined;
+    }
+
     let cancelled = false;
 
     import('vanta/dist/vanta.net.min').then((module) => {
@@ -27,14 +33,14 @@ export default function VantaBackground() {
         THREE,
         backgroundColor: 0x020405,
         color: 0x292c34,
-        points: 16.0,
-        maxDistance: 22.0,
-        spacing: 18.0,
+        points: 10.0,
+        maxDistance: 16.0,
+        spacing: 20.0,
         showDots: false,
         minHeight: 500.0,
         minWidth: 500.0,
-        mouseControls: true,
-        touchControls: true,
+        mouseControls: false,
+        touchControls: false,
         gyroControls: false,
       });
     });
