@@ -1,32 +1,18 @@
 import argparse
-import os
 import sqlite3
 import time
 from datetime import datetime, date, timedelta
-from pathlib import Path
-from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 import requests
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
+import uvicorn
 
 BASE_URL = "https://api.mfapi.in"  # MFAPI base URL (no auth needed)
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = str(BASE_DIR / "mfdata.sqlite3")
-SCHEME_SEARCH_CACHE: List[Dict[str, Any]] = []
-SCHEME_CACHE_LOCK = Lock()
-SCHEME_BOOTSTRAP_LOCK = Lock()
 
-
-def get_allowed_origins() -> List[str]:
-    raw_origins = os.getenv("CORS_ALLOW_ORIGINS", "*").strip()
-    if not raw_origins:
-        return ["*"]
-    if raw_origins == "*":
-        return ["*"]
-    return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+DB_PATH = "mfdata.sqlite3"
 
 
 # ----------------------------
@@ -47,10 +33,23 @@ def db_init() -> None:
         CREATE TABLE IF NOT EXISTS schemes (
             scheme_code INTEGER PRIMARY KEY,
             scheme_name TEXT NOT NULL,
+            scheme_type TEXT,
+            scheme_category TEXT,
+            fund_house TEXT,
             updated_at TEXT NOT NULL
         );
         """
     )
+
+    # Backward-compatible migration for existing DBs.
+    cur.execute("PRAGMA table_info(schemes)")
+    existing_columns = {row["name"] for row in cur.fetchall()}
+    if "scheme_type" not in existing_columns:
+        cur.execute("ALTER TABLE schemes ADD COLUMN scheme_type TEXT")
+    if "scheme_category" not in existing_columns:
+        cur.execute("ALTER TABLE schemes ADD COLUMN scheme_category TEXT")
+    if "fund_house" not in existing_columns:
+        cur.execute("ALTER TABLE schemes ADD COLUMN fund_house TEXT")
 
     cur.execute(
         """
@@ -71,68 +70,33 @@ def db_init() -> None:
     conn.close()
 
 
-def refresh_scheme_search_cache() -> int:
-    conn = db_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT scheme_code, scheme_name
-        FROM schemes
-        ORDER BY scheme_name;
-        """
-    )
-    rows = cur.fetchall()
-    conn.close()
-
-    cache_rows = [
-        {
-            "scheme_code": int(r["scheme_code"]),
-            "scheme_name": str(r["scheme_name"]),
-            "scheme_name_lc": str(r["scheme_name"]).lower(),
-            "scheme_code_str": str(r["scheme_code"]),
-        }
-        for r in rows
-    ]
-
-    with SCHEME_CACHE_LOCK:
-        SCHEME_SEARCH_CACHE.clear()
-        SCHEME_SEARCH_CACHE.extend(cache_rows)
-
-    return len(cache_rows)
-
-
-def ensure_scheme_search_cache() -> int:
-    with SCHEME_CACHE_LOCK:
-        cached_count = len(SCHEME_SEARCH_CACHE)
-    if cached_count:
-        return cached_count
-
-    cached_count = refresh_scheme_search_cache()
-    if cached_count:
-        return cached_count
-
-    with SCHEME_BOOTSTRAP_LOCK:
-        with SCHEME_CACHE_LOCK:
-            cached_count = len(SCHEME_SEARCH_CACHE)
-        if cached_count:
-            return cached_count
-
-        # Railway containers can restart with a fresh ephemeral filesystem.
-        # If the local SQLite DB is empty, rebuild the scheme catalog from MFAPI.
-        sync_all_schemes(limit=None, sleep_s=0.0)
-        return refresh_scheme_search_cache()
-
-
-def upsert_scheme(conn: sqlite3.Connection, scheme_code: int, scheme_name: str) -> None:
+def upsert_scheme(
+    conn: sqlite3.Connection,
+    scheme_code: int,
+    scheme_name: str,
+    scheme_type: Optional[str] = None,
+    scheme_category: Optional[str] = None,
+    fund_house: Optional[str] = None,
+) -> None:
     conn.execute(
         """
-        INSERT INTO schemes (scheme_code, scheme_name, updated_at)
-        VALUES (?, ?, ?)
+        INSERT INTO schemes (scheme_code, scheme_name, scheme_type, scheme_category, fund_house, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(scheme_code) DO UPDATE SET
           scheme_name=excluded.scheme_name,
+          scheme_type=COALESCE(excluded.scheme_type, schemes.scheme_type),
+          scheme_category=COALESCE(excluded.scheme_category, schemes.scheme_category),
+          fund_house=COALESCE(excluded.fund_house, schemes.fund_house),
           updated_at=excluded.updated_at;
         """,
-        (scheme_code, scheme_name, datetime.utcnow().isoformat()),
+        (
+            scheme_code,
+            scheme_name,
+            scheme_type,
+            scheme_category,
+            fund_house,
+            datetime.utcnow().isoformat(),
+        ),
     )
 
 
@@ -191,13 +155,35 @@ def sync_all_schemes(limit: Optional[int] = None, sleep_s: float = 0.15) -> int:
         scheme_code = item.get("schemeCode")
         scheme_name = item.get("schemeName")
         if scheme_code and scheme_name:
-            upsert_scheme(conn, int(scheme_code), str(scheme_name))
+            scheme_code_int = int(scheme_code)
+            scheme_name_str = str(scheme_name)
+            scheme_type = None
+            scheme_category = None
+            fund_house = None
+
+            try:
+                meta_payload = mfapi_get(session, f"/mf/{scheme_code_int}")
+                meta = meta_payload.get("meta", {})
+                scheme_type = meta.get("scheme_type")
+                scheme_category = meta.get("scheme_category")
+                fund_house = meta.get("fund_house")
+            except Exception:
+                # Keep sync resilient even if metadata fetch fails for some schemes.
+                pass
+
+            upsert_scheme(
+                conn,
+                scheme_code_int,
+                scheme_name_str,
+                scheme_type=scheme_type,
+                scheme_category=scheme_category,
+                fund_house=fund_house,
+            )
             count += 1
             if count % 200 == 0:
                 conn.commit()
     conn.commit()
     conn.close()
-    refresh_scheme_search_cache()
     return count
 
 
@@ -478,12 +464,11 @@ def comprehensive_backtest(
 # FastAPI app (your backend API)
 # ----------------------------
 db_init()
-refresh_scheme_search_cache()
 app = FastAPI(title="MFAPI Backtesting Backend (SQLite cache)")
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_allowed_origins(),
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -515,51 +500,30 @@ def health():
 
 @app.get("/")
 def root():
-    return {
-        "message": "MF Backtest API",
-        "health": "/health",
-        "scheme_search": "/api/schemes/search",
-        "backtest": "/api/backtest",
-    }
-
-
-@app.get("/api/schemes/search")
+    return {"message": "MF Backtest API", "health": "/health", "schemes": "/api/schemes/search"}
 def search_schemes(q: str):
     """Search schemes by code or name - used by frontend autocomplete"""
     if not q or len(q) < 1:
         return []
-
-    query = q.strip().lower()
-    ensure_scheme_search_cache()
-    with SCHEME_CACHE_LOCK:
-        cache_snapshot = list(SCHEME_SEARCH_CACHE)
-
-    starts_with_code = []
-    starts_with_name = []
-    contains_name = []
-
-    for item in cache_snapshot:
-        if item["scheme_code_str"].startswith(query):
-            starts_with_code.append(item)
-        elif item["scheme_name_lc"].startswith(query):
-            starts_with_name.append(item)
-        elif query in item["scheme_name_lc"]:
-            contains_name.append(item)
-
-        if len(starts_with_code) + len(starts_with_name) + len(contains_name) >= 20:
-            if len(starts_with_code) >= 20:
-                break
-            if len(starts_with_code) + len(starts_with_name) >= 20 and not contains_name:
-                break
-
-    rows = (starts_with_code + starts_with_name + contains_name)[:20]
-    return [
-        {
-            "scheme_code": row["scheme_code"],
-            "scheme_name": row["scheme_name"],
-        }
-        for row in rows
-    ]
+    
+    conn = db_conn()
+    cur = conn.cursor()
+    
+    # Search by both scheme_code and scheme_name
+    cur.execute(
+        """
+        SELECT scheme_code, scheme_name, scheme_type, scheme_category, fund_house
+        FROM schemes
+        WHERE scheme_code LIKE ? OR scheme_name LIKE ?
+        ORDER BY scheme_name
+        LIMIT 20
+        """,
+        (f"{q}%", f"%{q}%")
+    )
+    
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
 
 
 class BacktestRequest(BaseModel):
@@ -665,7 +629,7 @@ def list_schemes(
     if q:
         cur.execute(
             """
-            SELECT scheme_code, scheme_name
+            SELECT scheme_code, scheme_name, scheme_type, scheme_category, fund_house
             FROM schemes
             WHERE scheme_name LIKE ?
             ORDER BY scheme_name
@@ -676,7 +640,7 @@ def list_schemes(
     else:
         cur.execute(
             """
-            SELECT scheme_code, scheme_name
+            SELECT scheme_code, scheme_name, scheme_type, scheme_category, fund_house
             FROM schemes
             ORDER BY scheme_name
             LIMIT ? OFFSET ?;
@@ -707,16 +671,6 @@ def get_nav(
 @app.post("/admin/sync/schemes")
 def api_sync_schemes(limit: int = 100, sleep_s: float = 0.1):
     # NOTE: This can be long; best run via CLI in production.
-    try:
-        n = sync_all_schemes(limit=limit, sleep_s=sleep_s)
-        return {"inserted_or_updated": n}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/admin/sync/schemes")
-def api_sync_schemes_get(limit: int = 100, sleep_s: float = 0.1):
-    # Browser-friendly trigger for first-time dataset bootstrapping.
     try:
         n = sync_all_schemes(limit=limit, sleep_s=sleep_s)
         return {"inserted_or_updated": n}
@@ -962,3 +916,44 @@ def api_analyze_correlation(req: AnalysisRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
+
+# ----------------------------
+# CLI entrypoints (recommended for long sync jobs)
+# ----------------------------
+def main():
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    serve = sub.add_parser("serve")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+
+    ss = sub.add_parser("sync-schemes")
+    ss.add_argument("--limit", type=int, default=100)
+    ss.add_argument("--sleep", type=float, default=0.1)
+
+    sl = sub.add_parser("sync-latest")
+    sl.add_argument("--sleep", type=float, default=0.15)
+
+    sh = sub.add_parser("sync-history")
+    sh.add_argument("--scheme-code", type=int, required=True)
+    sh.add_argument("--startDate", default=None)
+    sh.add_argument("--endDate", default=None)
+
+    args = parser.parse_args()
+
+    if args.cmd == "serve":
+        uvicorn.run(app, host=args.host, port=args.port)
+    elif args.cmd == "sync-schemes":
+        n = sync_all_schemes(limit=args.limit, sleep_s=args.sleep)
+        print(f"schemes upserted: {n}")
+    elif args.cmd == "sync-latest":
+        n = sync_latest_for_all_schemes(sleep_s=args.sleep)
+        print(f"latest nav rows upserted: {n}")
+    elif args.cmd == "sync-history":
+        n = sync_history_for_scheme(args.scheme_code, args.startDate, args.endDate)
+        print(f"history nav rows upserted: {n}")
+
+
+if __name__ == "__main__":
+    main()

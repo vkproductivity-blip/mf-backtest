@@ -3,17 +3,11 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
-export default function VantaBackground() {
+export default function VantaBackground({ theme = 'dark' }) {
   const containerRef = useRef(null);
   const vantaRef = useRef(null);
 
   useEffect(() => {
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const lowPowerLayout = window.innerWidth <= 1600;
-    if (reducedMotion || lowPowerLayout) {
-      return undefined;
-    }
-
     let cancelled = false;
 
     import('vanta/dist/vanta.net.min').then((module) => {
@@ -28,19 +22,21 @@ export default function VantaBackground() {
         vantaRef.current = null;
       }
 
+      const isLight = theme === 'light';
+
       vantaRef.current = VANTA({
         el: containerRef.current,
         THREE,
-        backgroundColor: 0x020405,
-        color: 0x292c34,
-        points: 10.0,
-        maxDistance: 16.0,
-        spacing: 20.0,
+        backgroundColor: isLight ? 0xf0f5ff : 0x020405,
+        color: isLight ? 0xb5c8f5 : 0x292c34,
+        points: 16.0,
+        maxDistance: 22.0,
+        spacing: 18.0,
         showDots: false,
         minHeight: 500.0,
         minWidth: 500.0,
-        mouseControls: false,
-        touchControls: false,
+        mouseControls: true,
+        touchControls: true,
         gyroControls: false,
       });
     });
@@ -52,7 +48,7 @@ export default function VantaBackground() {
         vantaRef.current = null;
       }
     };
-  }, []);
+  }, [theme]);
 
   return <div ref={containerRef} className="vanta-bg" />;
 }
