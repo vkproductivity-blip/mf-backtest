@@ -452,8 +452,7 @@ td {
 }
 
 .popular-funds-sidebar {
-  position: sticky;
-  top: 24px;
+  position: static;
   width: 100%;
   max-height: calc(100vh - 48px);
   background: rgba(10, 14, 24, 0.84);
@@ -462,7 +461,6 @@ td {
   backdrop-filter: blur(18px);
   box-shadow: 0 22px 80px rgba(0, 0, 0, 0.45);
   padding: 28px;
-  z-index: 20;
   overflow-y: auto;
 }
 
