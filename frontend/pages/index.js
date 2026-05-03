@@ -117,7 +117,7 @@ export default function Home() {
           throw new Error('Unable to search schemes');
         }
         const results = await response.json();
-        setSearchResults(results.slice(0, 10));
+        setSearchResults(results.items.slice(0, 10));
       } catch (error) {
         console.error(error);
         setSearchResults([]);
@@ -144,7 +144,7 @@ export default function Home() {
           throw new Error('Unable to search schemes');
         }
         const results = await response.json();
-        setPortfolioSearchResults(results.slice(0, 10));
+        setPortfolioSearchResults(results.items.slice(0, 10));
       } catch (error) {
         console.error(error);
         setPortfolioSearchResults([]);
