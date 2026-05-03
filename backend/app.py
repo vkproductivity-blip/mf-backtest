@@ -987,7 +987,25 @@ def api_portfolio_backtest(req: PortfolioRequest):
             for code in req.scheme_codes:
                 series = load_nav_series(code, req.start_date, req.end_date)
                 if len(series) < 2:
-                    raise ValueError(f"Scheme {code} has insufficient data")
+                    # Auto-sync: fetch data from external API
+                    try:
+                        sync_history_for_scheme(code, None, None, sleep_s=0.1)
+                        series = load_nav_series(code, req.start_date, req.end_date)
+                        print(f"After auto-sync: {len(series)} NAV records for {code}")
+                    except Exception as sync_error:
+                        raise ValueError(f"Failed to sync data for scheme {code}: {str(sync_error)}")
+                    # If still insufficient data, try using most recent year available
+                    if len(series) < 2:
+                        all_series_tmp = load_nav_series(code, None, None)
+                        if all_series_tmp:
+                            latest_date = max(d for d, _ in all_series_tmp)
+                            fallback_start = (latest_date - timedelta(days=365)).isoformat()
+                            series = load_nav_series(code, fallback_start, latest_date.isoformat())
+                            print(f"Using recent data for scheme {code}: {len(series)} records from {fallback_start} to {latest_date.isoformat()}")
+                            if len(series) < 2:
+                                raise ValueError(f"Scheme {code} has insufficient data even after auto-sync")
+                        else:
+                            raise ValueError(f"Scheme {code} has no NAV data available")
                 all_series[code] = series
             
             # Find common dates across all series
@@ -1034,7 +1052,25 @@ def api_portfolio_backtest(req: PortfolioRequest):
             for idx, code in enumerate(req.scheme_codes):
                 series = load_nav_series(code, req.start_date, req.end_date)
                 if len(series) < 2:
-                    raise ValueError(f"Scheme {code} has insufficient data")
+                    # Auto-sync: fetch data from external API
+                    try:
+                        sync_history_for_scheme(code, None, None, sleep_s=0.1)
+                        series = load_nav_series(code, req.start_date, req.end_date)
+                        print(f"After auto-sync: {len(series)} NAV records for {code}")
+                    except Exception as sync_error:
+                        raise ValueError(f"Failed to sync data for scheme {code}: {str(sync_error)}")
+                    # If still insufficient data, try using most recent year available
+                    if len(series) < 2:
+                        all_series_tmp = load_nav_series(code, None, None)
+                        if all_series_tmp:
+                            latest_date = max(d for d, _ in all_series_tmp)
+                            fallback_start = (latest_date - timedelta(days=365)).isoformat()
+                            series = load_nav_series(code, fallback_start, latest_date.isoformat())
+                            print(f"Using recent data for scheme {code}: {len(series)} records from {fallback_start} to {latest_date.isoformat()}")
+                            if len(series) < 2:
+                                raise ValueError(f"Scheme {code} has insufficient data even after auto-sync")
+                        else:
+                            raise ValueError(f"Scheme {code} has no NAV data available")
                 # Run comprehensive backtest for this fund with its allocation as monthly SIP
                 res = comprehensive_backtest(
                     series=series,
