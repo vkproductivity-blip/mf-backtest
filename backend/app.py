@@ -741,11 +741,11 @@ def list_schemes(
             """
             SELECT scheme_code, scheme_name
             FROM schemes
-            WHERE scheme_name LIKE ?
+            WHERE scheme_name LIKE ? OR CAST(scheme_code AS TEXT) LIKE ?
             ORDER BY scheme_name
             LIMIT ? OFFSET ?;
             """,
-            (f"%{q}%", limit, offset),
+            (f"%{q}%", f"%{q}%", limit, offset),
         )
     else:
         cur.execute(
