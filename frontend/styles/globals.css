@@ -547,19 +547,309 @@ td {
     width: min(100%, calc(100% - 32px));
     padding: 24px 0 40px;
   }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  .hero-panel {
+    padding: 24px;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .hero-badge {
+    align-self: flex-start;
+  }
+
+  .form-panel,
+  .summary-panel,
+  .chart-card,
+  .table-panel {
+    padding: 20px;
+  }
+
+  .chart-card {
+    min-height: 350px;
+  }
+
+  .chart-frame {
+    min-height: 260px;
+  }
 }
 
- @media (max-width: 720px) {
-   .hero-panel {
-     padding: 24px;
-   }
+@media (max-width: 720px) {
+  .page-frame {
+    width: min(100%, calc(100% - 24px));
+    padding: 16px 0 32px;
+  }
 
-   .panel-heading,
-   .button-row {
-     flex-direction: column;
-     align-items: stretch;
-   }
- }
+  h1 {
+    font-size: 1.7rem;
+  }
+
+  .hero-panel {
+    padding: 18px 20px;
+    margin-bottom: 18px;
+  }
+
+  .hero-copy {
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .hero-badge,
+  .badge,
+  .chip {
+    font-size: 0.72rem;
+    padding: 8px 12px;
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    letter-spacing: 0.15em;
+  }
+
+  .form-panel,
+  .summary-panel,
+  .chart-card,
+  .table-panel {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .panel-title {
+    font-size: 1.1rem;
+  }
+
+  .panel-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .panel-heading,
+  .button-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .panel-heading {
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .panel-heading .chip,
+  .panel-heading .badge {
+    align-self: flex-start;
+  }
+
+  .row-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .field-group {
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .field-group label {
+    font-size: 0.85rem;
+  }
+
+  input,
+  select {
+    padding: 12px 14px;
+    font-size: 0.95rem;
+    border-radius: 12px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .metric-card {
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .metric-value {
+    font-size: 1.25rem;
+  }
+
+  .metric-label {
+    font-size: 0.78rem;
+  }
+
+  .chart-card {
+    min-height: 300px;
+  }
+
+  .chart-frame {
+    min-height: 220px;
+  }
+
+  .chart-section {
+    gap: 16px;
+  }
+
+  .tab-bar {
+    gap: 8px;
+  }
+
+  .tab {
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    border-radius: 10px;
+  }
+
+  th, td {
+    padding: 12px 10px;
+    font-size: 0.85rem;
+  }
+
+  th {
+    font-size: 0.72rem;
+  }
+
+  .popular-funds-sidebar {
+    padding: 20px;
+    border-radius: 20px;
+  }
+
+  .sidebar-title {
+    font-size: 1.1rem;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+  }
+
+  .fund-card {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .fund-code {
+    font-size: 0.85rem;
+  }
+
+  .fund-name {
+    font-size: 0.8rem;
+  }
+
+  .fund-return {
+    font-size: 1.15rem;
+  }
+
+  .portfolio-fund-row {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .portfolio-fund-row .fund-alloc {
+    width: 100%;
+    min-width: 100px;
+    flex: 1;
+  }
+
+  .portfolio-fund-row .fund-info {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .btn-remove {
+    align-self: flex-end;
+  }
+
+  .mode-toggle {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .search-dropdown {
+    max-height: 240px;
+  }
+
+  .search-item {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .search-item span {
+    font-size: 0.85rem;
+  }
+
+  .search-item small {
+    font-size: 0.78rem;
+  }
+
+  .hint-box {
+    padding: 14px 16px;
+    font-size: 0.85rem;
+  }
+
+  .toast {
+    padding: 14px 18px;
+    font-size: 0.9rem;
+    border-radius: 16px;
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-frame {
+    width: min(100%, calc(100% - 16px));
+    padding: 12px 0 24px;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+  }
+
+  .hero-panel {
+    padding: 14px 16px;
+    border-radius: 20px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-2-up,
+  .chart-section {
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .form-panel,
+  .summary-panel,
+  .chart-card,
+  .table-panel {
+    padding: 14px;
+  }
+
+  .chart-card {
+    min-height: 260px;
+  }
+
+  .chart-frame {
+    min-height: 200px;
+  }
+
+  .tab-bar {
+    flex-direction: column;
+  }
+
+  .btn {
+    padding: 12px 18px;
+    font-size: 0.9rem;
+    border-radius: 12px;
+  }
+
+  .popular-funds {
+    gap: 10px;
+  }
+}
 
  /* Portfolio Mode Styles */
  .mode-toggle {

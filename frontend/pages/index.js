@@ -235,10 +235,6 @@ export default function Home() {
       showAlert('warning', 'Add at least 2 funds to the portfolio.');
       return false;
     }
-    if (portfolioFunds.length > 5) {
-      showAlert('warning', 'Maximum 5 funds allowed in portfolio.');
-      return false;
-    }
     for (const fund of portfolioFunds) {
       if (!fund.amount || fund.amount <= 0) {
         showAlert('warning', `Amount for ${fund.name} must be greater than zero.`);
@@ -412,7 +408,7 @@ export default function Home() {
                    <div className="panel-heading">
                      <div>
                        <p className="panel-title">{analysisMode === 'single' ? 'Backtest Parameters' : 'Portfolio Builder'}</p>
-                       <p className="panel-subtitle">{analysisMode === 'single' ? 'Search any scheme and run a backtest in seconds.' : 'Select up to 5 funds and allocate amounts.'}</p>
+                       <p className="panel-subtitle">{analysisMode === 'single' ? 'Search any scheme and run a backtest in seconds.' : 'Select unlimited funds and allocate amounts.'}</p>
                      </div>
                      <span className="chip">Interactive</span>
                    </div>
@@ -431,7 +427,7 @@ export default function Home() {
                        className={`mode-btn ${analysisMode === 'portfolio' ? 'active' : ''}`}
                        onClick={() => setAnalysisMode('portfolio')}
                      >
-                       Portfolio (Up to 5)
+                       Portfolio
                      </button>
                    </div>
 

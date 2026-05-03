@@ -527,7 +527,7 @@ def root():
 def search_schemes(q: str):
     """Search schemes by code or name - used by frontend autocomplete"""
     if not q or len(q) < 1:
-        return []
+        return {"count": 0, "items": []}
 
     query = q.strip().lower()
     ensure_scheme_search_cache()
@@ -553,13 +553,14 @@ def search_schemes(q: str):
                 break
 
     rows = (starts_with_code + starts_with_name + contains_name)[:20]
-    return [
+    items = [
         {
             "scheme_code": row["scheme_code"],
             "scheme_name": row["scheme_name"],
         }
         for row in rows
     ]
+    return {"count": len(items), "items": items}
 
 
 class BacktestRequest(BaseModel):
@@ -651,80 +652,6 @@ def api_backtest(req: BacktestRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
-
-
-@app.get("/api/schemes/search")
-def api_schemes_search(
-    q: Optional[str] = Query(default=None, description="Search substring in scheme name"),
-    limit: int = 50,
-    offset: int = 0,
-):
-    """Search schemes with autocomplete (used by frontend)"""
-    conn = db_conn()
-    cur = conn.cursor()
-
-    if q:
-        cur.execute(
-            """
-            SELECT scheme_code, scheme_name
-            FROM schemes
-            WHERE scheme_name LIKE ? OR scheme_code LIKE ?
-            ORDER BY scheme_name
-            LIMIT ? OFFSET ?;
-            """,
-            (f"%{q}%", f"{q}%", limit, offset),
-        )
-    else:
-        cur.execute(
-            """
-            SELECT scheme_code, scheme_name
-            FROM schemes
-            ORDER BY scheme_name
-            LIMIT ? OFFSET ?;
-            """,
-            (limit, offset),
-        )
-
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
-    return {"count": len(rows), "items": rows}
-
-
-@app.get("/api/schemes/search")
-def api_schemes_search(
-    q: Optional[str] = Query(default=None, description="Search substring in scheme name"),
-    limit: int = 50,
-    offset: int = 0,
-):
-    """Search schemes with autocomplete (used by frontend)"""
-    conn = db_conn()
-    cur = conn.cursor()
-
-    if q:
-        cur.execute(
-            """
-            SELECT scheme_code, scheme_name
-            FROM schemes
-            WHERE scheme_name LIKE ? OR scheme_code LIKE ?
-            ORDER BY scheme_name
-            LIMIT ? OFFSET ?;
-            """,
-            (f"%{q}%", f"{q}%", limit, offset),
-        )
-    else:
-        cur.execute(
-            """
-            SELECT scheme_code, scheme_name
-            FROM schemes
-            ORDER BY scheme_name
-            LIMIT ? OFFSET ?;
-            """,
-            (limit, offset),
-        )
-
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
-    return {"count": len(rows), "items": rows}
 
 
 @app.get("/schemes")
@@ -1030,8 +957,6 @@ def api_portfolio_backtest(req: PortfolioRequest):
     try:
         if len(req.scheme_codes) < 2:
             raise ValueError("At least 2 schemes required for portfolio")
-        if len(req.scheme_codes) > 5:
-            raise ValueError("Maximum 5 schemes allowed for portfolio")
         if len(req.scheme_codes) != len(req.allocations):
             raise ValueError("Number of schemes must match number of allocations")
         if any(a <= 0 for a in req.allocations):
