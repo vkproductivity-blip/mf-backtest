@@ -549,14 +549,132 @@ td {
   }
 }
 
-@media (max-width: 720px) {
-  .hero-panel {
-    padding: 24px;
-  }
+ @media (max-width: 720px) {
+   .hero-panel {
+     padding: 24px;
+   }
 
-  .panel-heading,
-  .button-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
+   .panel-heading,
+   .button-row {
+     flex-direction: column;
+     align-items: stretch;
+   }
+ }
+
+ /* Portfolio Mode Styles */
+ .mode-toggle {
+   display: flex;
+   gap: 8px;
+   margin-bottom: 16px;
+ }
+
+ .mode-btn {
+   flex: 1;
+   padding: 10px 14px;
+   border: 1px solid rgba(255, 255, 255, 0.15);
+   border-radius: 12px;
+   background: rgba(255, 255, 255, 0.04);
+   color: #b8c5d8;
+   font-size: 0.9rem;
+   cursor: pointer;
+   transition: all 0.2s ease;
+ }
+
+ .mode-btn:hover {
+   background: rgba(255, 255, 255, 0.08);
+ }
+
+ .mode-btn.active {
+   background: rgba(121, 192, 255, 0.15);
+   border-color: rgba(121, 192, 255, 0.5);
+   color: #79c0ff;
+ }
+
+ .portfolio-list {
+   margin-bottom: 16px;
+   border: 1px solid rgba(255, 255, 255, 0.08);
+   border-radius: 12px;
+   overflow: hidden;
+ }
+
+ .portfolio-fund-row {
+   display: flex;
+   align-items: center;
+   gap: 12px;
+   padding: 10px 12px;
+   background: rgba(255, 255, 255, 0.03);
+   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+ }
+
+ .portfolio-fund-row:last-child {
+   border-bottom: none;
+ }
+
+ .portfolio-fund-row .fund-info {
+   flex: 1;
+   display: flex;
+   flex-direction: column;
+   min-width: 0;
+ }
+
+ .portfolio-fund-row .fund-info strong {
+   color: #e8f2ff;
+   font-size: 0.9rem;
+ }
+
+ .portfolio-fund-row .fund-info small {
+   color: #8a9bb8;
+   font-size: 0.75rem;
+   white-space: nowrap;
+   overflow: hidden;
+   text-overflow: ellipsis;
+ }
+
+ .portfolio-fund-row .fund-alloc {
+   width: 140px;
+   display: flex;
+   flex-direction: column;
+   gap: 4px;
+ }
+
+ .portfolio-fund-row .fund-alloc label {
+   font-size: 0.7rem;
+   color: #7d94b7;
+   text-transform: uppercase;
+   letter-spacing: 0.05em;
+ }
+
+ .portfolio-fund-row .fund-alloc input {
+   width: 100%;
+   padding: 6px 10px;
+   border: 1px solid rgba(255, 255, 255, 0.12);
+   border-radius: 8px;
+   background: rgba(0, 0, 0, 0.2);
+   color: #e5e8f0;
+   font-size: 0.9rem;
+ }
+
+ .portfolio-fund-row .fund-alloc input:focus {
+   outline: none;
+   border-color: rgba(121, 192, 255, 0.5);
+ }
+
+ .btn-remove {
+   width: 32px;
+   height: 32px;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   border: 1px solid rgba(255, 98, 125, 0.4);
+   border-radius: 8px;
+   background: transparent;
+   color: #ff637d;
+   font-size: 1rem;
+   cursor: pointer;
+   transition: all 0.2s;
+ }
+
+ .btn-remove:hover {
+   background: rgba(255, 98, 125, 0.15);
+   border-color: #ff637d;
+ }

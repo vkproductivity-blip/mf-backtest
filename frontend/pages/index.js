@@ -80,6 +80,15 @@ export default function Home() {
   const [showSearch, setShowSearch] = useState(false);
   const searchTimer = useRef(null);
   const alertTimer = useRef(null);
+  
+  // Portfolio mode state
+  const [analysisMode, setAnalysisMode] = useState('single'); // 'single' | 'portfolio'
+  const [portfolioFunds, setPortfolioFunds] = useState([]); // {code, name, amount}
+  const [portfolioQuery, setPortfolioQuery] = useState('');
+  const [portfolioSearchResults, setPortfolioSearchResults] = useState([]);
+  const [portfolioInvestmentType, setPortfolioInvestmentType] = useState('lump-sum');
+  const [showPortfolioSearch, setShowPortfolioSearch] = useState(false);
+  const portfolioSearchTimer = useRef(null);
 
   useEffect(() => {
     const today = new Date();
@@ -116,7 +125,34 @@ export default function Home() {
     }, 300);
 
     return () => clearTimeout(searchTimer.current);
-  }, [schemeQuery]);
+   }, [schemeQuery]);
+
+  useEffect(() => {
+    if (!portfolioQuery || portfolioQuery.length < 2) {
+      setPortfolioSearchResults([]);
+      return;
+    }
+
+    if (portfolioSearchTimer.current) {
+      clearTimeout(portfolioSearchTimer.current);
+    }
+
+    portfolioSearchTimer.current = setTimeout(async () => {
+      try {
+        const response = await fetch(buildApiUrl(`/api/schemes/search?q=${encodeURIComponent(portfolioQuery)}`));
+        if (!response.ok) {
+          throw new Error('Unable to search schemes');
+        }
+        const results = await response.json();
+        setPortfolioSearchResults(results.slice(0, 10));
+      } catch (error) {
+        console.error(error);
+        setPortfolioSearchResults([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(portfolioSearchTimer.current);
+  }, [portfolioQuery]);
 
   const selectedScheme = (schemeCode, schemeName) => {
     setForm((current) => ({
@@ -127,6 +163,30 @@ export default function Home() {
     setSchemeQuery(`${schemeCode} - ${schemeName}`);
     setSearchResults([]);
     setShowSearch(false);
+  };
+
+  // Portfolio functions
+  const addFundToPortfolio = (schemeCode, schemeName) => {
+    setPortfolioFunds((current) => {
+      // Avoid duplicates
+      if (current.some((f) => f.code === schemeCode)) {
+        return current;
+      }
+      return [...current, { code: schemeCode, name: schemeName, amount: 10000 }];
+    });
+    setPortfolioQuery('');
+    setPortfolioSearchResults([]);
+    setShowPortfolioSearch(false);
+  };
+
+  const removeFundFromPortfolio = (index) => {
+    setPortfolioFunds((current) => current.filter((_, i) => i !== index));
+  };
+
+  const updateFundAmount = (index, amount) => {
+    setPortfolioFunds((current) =>
+      current.map((fund, i) => (i === index ? { ...fund, amount: amount || 0 } : fund))
+    );
   };
 
   const handleInput = (field, value) => {
@@ -170,41 +230,79 @@ export default function Home() {
     return true;
   };
 
-  const runBacktest = async () => {
-    if (!validateForm()) {
-      return;
+  const validatePortfolio = () => {
+    if (portfolioFunds.length < 2) {
+      showAlert('warning', 'Add at least 2 funds to the portfolio.');
+      return false;
+    }
+    if (portfolioFunds.length > 5) {
+      showAlert('warning', 'Maximum 5 funds allowed in portfolio.');
+      return false;
+    }
+    for (const fund of portfolioFunds) {
+      if (!fund.amount || fund.amount <= 0) {
+        showAlert('warning', `Amount for ${fund.name} must be greater than zero.`);
+        return false;
+      }
+    }
+    if (new Date(form.startDate) >= new Date(form.endDate)) {
+      showAlert('warning', 'Start date must be before end date.');
+      return false;
+    }
+    return true;
+  };
+
+  const runAnalysis = async () => {
+    if (analysisMode === 'single') {
+      if (!validateForm()) return;
+    } else {
+      if (!validatePortfolio()) return;
     }
     clearAlerts();
     setLoading(true);
     setBacktest(null);
 
-    const payload = {
-      scheme_code: parseInt(form.schemeCode, 10),
-      start_date: form.startDate,
-      end_date: form.endDate,
-      investment_type: form.investmentType,
-      lumpsum_amount: form.investmentType === 'lump-sum' ? Number(form.investmentAmount) : undefined,
-      sip_amount: form.investmentType === 'sip' ? Number(form.sipAmount) : undefined,
-    };
+    let payload, endpoint;
+    if (analysisMode === 'single') {
+      endpoint = '/api/backtest';
+      payload = {
+        scheme_code: parseInt(form.schemeCode, 10),
+        start_date: form.startDate,
+        end_date: form.endDate,
+        investment_type: form.investmentType,
+        lumpsum_amount: form.investmentType === 'lump-sum' ? Number(form.investmentAmount) : undefined,
+        sip_amount: form.investmentType === 'sip' ? Number(form.sipAmount) : undefined,
+      };
+    } else {
+      endpoint = '/api/portfolio-backtest';
+      payload = {
+        scheme_codes: portfolioFunds.map((f) => f.code),
+        allocations: portfolioFunds.map((f) => Number(f.amount)),
+        start_date: form.startDate,
+        end_date: form.endDate,
+        investment_type: portfolioInvestmentType,
+      };
+    }
 
     try {
-      const response = await fetch(buildApiUrl('/api/backtest'), {
+      const response = await fetch(buildApiUrl(endpoint), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || 'Backtest failed');
+        throw new Error(data.detail || 'Analysis failed');
       }
       setBacktest(data);
-      showAlert('success', 'Backtest complete. Review the interactive dashboard below.');
+      showAlert('success', analysisMode === 'single' ? 'Backtest complete. Review the interactive dashboard below.' : 'Portfolio analysis complete.');
     } catch (error) {
       console.error(error);
       showAlert('error', error.message || 'Request failed');
     } finally {
       setLoading(false);
       setShowSearch(false);
+      setShowPortfolioSearch(false);
     }
   };
 
@@ -219,6 +317,9 @@ export default function Home() {
     setSchemeQuery('');
     setSearchResults([]);
     setBacktest(null);
+    setPortfolioFunds([]);
+    setPortfolioQuery('');
+    setPortfolioSearchResults([]);
     clearAlerts();
   };
 
@@ -308,39 +409,136 @@ export default function Home() {
             <div className="dashboard-main">
               <section className="grid-2-up">
                 <article className="glass-panel form-panel">
-                  <div className="panel-heading">
-                    <div>
-                      <p className="panel-title">Backtest Parameters</p>
-                      <p className="panel-subtitle">Search any scheme and run a backtest in seconds.</p>
-                    </div>
-                    <span className="chip">Interactive</span>
-                  </div>
+                   <div className="panel-heading">
+                     <div>
+                       <p className="panel-title">{analysisMode === 'single' ? 'Backtest Parameters' : 'Portfolio Builder'}</p>
+                       <p className="panel-subtitle">{analysisMode === 'single' ? 'Search any scheme and run a backtest in seconds.' : 'Select up to 5 funds and allocate amounts.'}</p>
+                     </div>
+                     <span className="chip">Interactive</span>
+                   </div>
 
-                  <div className="field-group">
-                    <label>Mutual Fund Scheme</label>
-                    <input
-                      type="text"
-                      value={schemeQuery}
-                      onChange={(event) => handleInput('schemeCode', event.target.value)}
-                      placeholder="Search by scheme code or name"
-                      className="search-input"
-                    />
-                    {showSearch && searchResults.length > 0 && (
-                      <div className="search-dropdown">
-                        {searchResults.map((item) => (
-                          <button
-                            key={item.scheme_code}
-                            type="button"
-                            className="search-item"
-                            onClick={() => selectedScheme(item.scheme_code, item.scheme_name)}
-                          >
-                            <span>{item.scheme_code}</span>
-                            <small>{item.scheme_name}</small>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                   {/* Mode Toggle */}
+                   <div className="mode-toggle">
+                     <button
+                       type="button"
+                       className={`mode-btn ${analysisMode === 'single' ? 'active' : ''}`}
+                       onClick={() => setAnalysisMode('single')}
+                     >
+                       Single Fund
+                     </button>
+                     <button
+                       type="button"
+                       className={`mode-btn ${analysisMode === 'portfolio' ? 'active' : ''}`}
+                       onClick={() => setAnalysisMode('portfolio')}
+                     >
+                       Portfolio (Up to 5)
+                     </button>
+                   </div>
+
+                   {analysisMode === 'single' ? (
+                     <>
+                       <div className="field-group">
+                         <label>Mutual Fund Scheme</label>
+                         <input
+                           type="text"
+                           value={schemeQuery}
+                           onChange={(event) => handleInput('schemeCode', event.target.value)}
+                           placeholder="Search by scheme code or name"
+                           className="search-input"
+                         />
+                         {showSearch && searchResults.length > 0 && (
+                           <div className="search-dropdown">
+                             {searchResults.map((item) => (
+                               <button
+                                 key={item.scheme_code}
+                                 type="button"
+                                 className="search-item"
+                                 onClick={() => selectedScheme(item.scheme_code, item.scheme_name)}
+                               >
+                                 <span>{item.scheme_code}</span>
+                                 <small>{item.scheme_name}</small>
+                               </button>
+                             ))}
+                           </div>
+                         )}
+                       </div>
+                     </>
+                   ) : (
+                     <>
+                       {/* Portfolio Search */}
+                       <div className="field-group">
+                         <label>Add Mutual Fund to Portfolio</label>
+                         <input
+                           type="text"
+                           value={portfolioQuery}
+                           onChange={(event) => { setPortfolioQuery(event.target.value); setShowPortfolioSearch(true); }}
+                           placeholder="Search by scheme code or name"
+                           className="search-input"
+                         />
+                         {showPortfolioSearch && portfolioSearchResults.length > 0 && (
+                           <div className="search-dropdown">
+                             {portfolioSearchResults.map((item) => (
+                               <button
+                                 key={item.scheme_code}
+                                 type="button"
+                                 className="search-item"
+                                 onClick={() => addFundToPortfolio(item.scheme_code, item.scheme_name)}
+                               >
+                                 <span>{item.scheme_code}</span>
+                                 <small>{item.scheme_name}</small>
+                               </button>
+                             ))}
+                           </div>
+                         )}
+                       </div>
+
+                       {/* Portfolio Funds List */}
+                       {portfolioFunds.length > 0 && (
+                         <div className="portfolio-list">
+                           {portfolioFunds.map((fund, idx) => (
+                             <div key={idx} className="portfolio-fund-row">
+                               <div className="fund-info">
+                                 <strong>{fund.code}</strong>
+                                 <small>{fund.name}</small>
+                               </div>
+                               <div className="fund-alloc">
+                                 <label>Amount</label>
+                                 <input
+                                   type="number"
+                                   value={fund.amount}
+                                   onChange={(e) => updateFundAmount(idx, e.target.value)}
+                                   min="100"
+                                   step="100"
+                                   placeholder="Amount"
+                                 />
+                               </div>
+                               <button
+                                 type="button"
+                                 className="btn-remove"
+                                 onClick={() => removeFundFromPortfolio(idx)}
+                                 title="Remove fund"
+                               >
+                                 ✕
+                               </button>
+                             </div>
+                           ))}
+                         </div>
+                       )}
+
+                       <div className="hint-box">
+                         <strong>Portfolio Total:</strong> {formatCurrency(portfolioFunds.reduce((sum, f) => sum + Number(f.amount || 0), 0))}
+                       </div>
+
+                       {/* Portfolio Investment Type */}
+                       <div className="field-group">
+                         <label>Investment Type</label>
+                         <select value={portfolioInvestmentType} onChange={(e) => setPortfolioInvestmentType(e.target.value)}>
+                           <option value="lump-sum">Lump Sum</option>
+                           <option value="sip">SIP</option>
+                         </select>
+                       </div>
+                     </>
+                   )}
 
                   <div className="row-grid">
                     <div className="field-group">
@@ -353,34 +551,36 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="row-grid">
-                    <div className="field-group">
-                      <label>Investment Type</label>
-                      <select value={form.investmentType} onChange={(event) => handleInput('investmentType', event.target.value)}>
-                        <option value="lump-sum">Lump Sum</option>
-                        <option value="sip">SIP</option>
-                      </select>
-                    </div>
-                    <div className="field-group">
-                      <label>{form.investmentType === 'sip' ? 'Monthly SIP Amount' : 'Lump Sum Amount'}</label>
-                      <input
-                        type="number"
-                        value={form.investmentType === 'sip' ? form.sipAmount : form.investmentAmount}
-                        onChange={(event) => handleInput(form.investmentType === 'sip' ? 'sipAmount' : 'investmentAmount', event.target.value)}
-                        min="100"
-                        step="100"
-                      />
-                    </div>
-                  </div>
+                   {analysisMode === 'single' && (
+                     <div className="row-grid">
+                       <div className="field-group">
+                         <label>Investment Type</label>
+                         <select value={form.investmentType} onChange={(event) => handleInput('investmentType', event.target.value)}>
+                           <option value="lump-sum">Lump Sum</option>
+                           <option value="sip">SIP</option>
+                         </select>
+                       </div>
+                       <div className="field-group">
+                         <label>{form.investmentType === 'sip' ? 'Monthly SIP Amount' : 'Lump Sum Amount'}</label>
+                         <input
+                           type="number"
+                           value={form.investmentType === 'sip' ? form.sipAmount : form.investmentAmount}
+                           onChange={(event) => handleInput(form.investmentType === 'sip' ? 'sipAmount' : 'investmentAmount', event.target.value)}
+                           min="100"
+                           step="100"
+                         />
+                       </div>
+                     </div>
+                   )}
 
-                  <div className="button-row">
-                    <button className="btn btn-primary" onClick={runBacktest} disabled={loading}>
-                      {loading ? 'Running...' : 'Run Backtest'}
-                    </button>
-                    <button className="btn btn-secondary" onClick={resetForm} disabled={loading}>
-                      Reset
-                    </button>
-                  </div>
+                   <div className="button-row">
+                     <button className="btn btn-primary" onClick={runAnalysis} disabled={loading}>
+                       {loading ? 'Running...' : (analysisMode === 'single' ? 'Run Backtest' : 'Analyze Portfolio')}
+                     </button>
+                     <button className="btn btn-secondary" onClick={resetForm} disabled={loading}>
+                       Reset
+                     </button>
+                   </div>
 
                   <div className="hint-box">
                     <strong>Tip:</strong> pick a scheme from autocomplete so the public deployment always sends a valid scheme code.

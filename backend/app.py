@@ -778,6 +778,14 @@ class ComparisonRequest(BaseModel):
     sip_amount: Optional[float] = 5000
 
 
+class PortfolioRequest(BaseModel):
+    scheme_codes: List[int]  # 2-5 schemes
+    allocations: List[float]  # amount for each scheme (lump) or monthly SIP amount per scheme
+    start_date: str  # YYYY-MM-DD
+    end_date: str    # YYYY-MM-DD
+    investment_type: str = "lump-sum"  # "lump-sum" or "sip"
+
+
 class AnalysisRequest(BaseModel):
     scheme_codes: List[int]
     start_date: str
@@ -861,6 +869,209 @@ def api_compare_schemes(req: ComparisonRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Comparison failed: {str(e)}")
+
+
+def _compute_metrics_from_portfolio_values(portfolio_values, dates, total_invested, investment_type, scheme_name, sip_monthly_amount=None):
+    """Calculate backtest metrics given portfolio values series."""
+    if len(portfolio_values) < 2:
+        raise ValueError("Need at least 2 data points for backtest")
+    
+    portfolio_arr = np.array(portfolio_values, dtype=float)
+    
+    # Convert dates to date objects if needed
+    date_objs = []
+    for d in dates:
+        if isinstance(d, str):
+            date_objs.append(datetime.fromisoformat(d).date())
+        elif isinstance(d, datetime):
+            date_objs.append(d.date())
+        else:
+            date_objs.append(d)  # assume date
+    start_date = date_objs[0]
+    end_date = date_objs[-1]
+    days = (end_date - start_date).days
+    years = days / 365.25
+    
+    final_value = float(portfolio_arr[-1])
+    
+    # Calculate daily returns
+    daily_returns = np.diff(portfolio_arr) / portfolio_arr[:-1]
+    
+    # Metrics
+    total_return = (final_value - total_invested) / total_invested
+    cagr = (final_value / total_invested) ** (1 / years) - 1 if years > 0 else 0
+    
+    # Max drawdown
+    peak = np.maximum.accumulate(portfolio_arr)
+    drawdown = (portfolio_arr - peak) / peak
+    max_drawdown = float(np.min(drawdown))
+    
+    # Volatility (annualized)
+    volatility = np.std(daily_returns) * np.sqrt(252)
+    
+    # Sharpe ratio (assuming 0% risk-free rate)
+    avg_daily_return = float(np.mean(daily_returns))
+    sharpe_ratio = (avg_daily_return * 252) / (np.std(daily_returns) * np.sqrt(252)) if np.std(daily_returns) > 0 else 0
+    
+    # Best/worst day
+    best_day_return = float(np.max(daily_returns))
+    worst_day_return = float(np.min(daily_returns))
+    
+    # Positive days
+    positive_days = int(np.sum(daily_returns > 0))
+    total_trading_days = len(daily_returns)
+    
+    return {
+        "scheme_code": None,
+        "scheme_name": scheme_name,
+        "investment_type": investment_type,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "lumpsum_amount": total_invested if investment_type == "lump-sum" else None,
+        "sip_amount": sip_monthly_amount if investment_type == "sip" else None,
+        "total_invested": float(total_invested),
+        "final_value": final_value,
+        "total_return": float(total_return),
+        "cagr": float(cagr),
+        "max_drawdown": float(max_drawdown),
+        "volatility": float(volatility),
+        "sharpe_ratio": float(sharpe_ratio),
+        "avg_daily_return": avg_daily_return,
+        "best_day_return": best_day_return,
+        "worst_day_return": worst_day_return,
+        "positive_days": positive_days,
+        "total_trading_days": total_trading_days,
+        "nav_dates": [d.isoformat() for d in date_objs],
+        "portfolio_values": portfolio_values,
+        "daily_returns": daily_returns.tolist(),
+    }
+
+
+@app.post("/api/portfolio-backtest")
+def api_portfolio_backtest(req: PortfolioRequest):
+    """
+    Run a portfolio backtest with multiple schemes and custom allocations.
+    Supports both lump-sum and SIP modes. Returns full metrics like single backtest.
+    """
+    try:
+        if len(req.scheme_codes) < 2:
+            raise ValueError("At least 2 schemes required for portfolio")
+        if len(req.scheme_codes) > 5:
+            raise ValueError("Maximum 5 schemes allowed for portfolio")
+        if len(req.scheme_codes) != len(req.allocations):
+            raise ValueError("Number of schemes must match number of allocations")
+        if any(a <= 0 for a in req.allocations):
+            raise ValueError("Allocations must be positive")
+        
+        if req.investment_type not in ["lump-sum", "sip"]:
+            raise ValueError("investment_type must be 'lump-sum' or 'sip'")
+        
+        # Fetch scheme names
+        conn = db_conn()
+        scheme_names = {}
+        for code in req.scheme_codes:
+            cur = conn.cursor()
+            cur.execute("SELECT scheme_name FROM schemes WHERE scheme_code = ?", (code,))
+            row = cur.fetchone()
+            if not row:
+                raise ValueError(f"Scheme code {code} not found")
+            scheme_names[code] = row["scheme_name"]
+        conn.close()
+        
+        total_invested = sum(req.allocations)
+        portfolio_name = f"Portfolio: " + ", ".join([f"{name} ({code})" for code, name in scheme_names.items()])
+        
+        # LUMP-SUM Portfolio
+        if req.investment_type == "lump-sum":
+            # Load NAV series for each scheme
+            all_series = {}
+            for code in req.scheme_codes:
+                series = load_nav_series(code, req.start_date, req.end_date)
+                if len(series) < 2:
+                    raise ValueError(f"Scheme {code} has insufficient data")
+                all_series[code] = series
+            
+            # Find common dates across all series
+            date_sets = [set(d for d, _ in all_series[code]) for code in req.scheme_codes]
+            common_dates = sorted(set.intersection(*date_sets))
+            if len(common_dates) < 2:
+                raise ValueError("No overlapping dates found across the selected schemes")
+            
+            # Build nav lookups and compute start NAV (on first common date) for each scheme
+            nav_lookups = {}
+            start_navs = {}
+            for code in req.scheme_codes:
+                nav_map = {d: nav for d, nav in all_series[code]}
+                nav_lookups[code] = nav_map
+                start_nav = nav_map[common_dates[0]]
+                if start_nav <= 0:
+                    raise ValueError(f"Invalid start NAV for scheme {code}")
+                start_navs[code] = start_nav
+            
+            # Build combined portfolio values: sum( allocation_i * nav_i(t) / start_nav_i )
+            combined_values = []
+            for date in common_dates:
+                total_val = 0.0
+                for idx, code in enumerate(req.scheme_codes):
+                    alloc = req.allocations[idx]
+                    nav = nav_lookups[code][date]
+                    total_val += alloc * (nav / start_navs[code])
+                combined_values.append(total_val)
+            
+            result = _compute_metrics_from_portfolio_values(
+                combined_values,
+                common_dates,
+                total_invested,
+                req.investment_type,
+                portfolio_name,
+                sip_monthly_amount=None
+            )
+            return result
+        
+        # SIP Portfolio
+        else:  # sip
+            # For each scheme, run individual SIP backtest
+            individual_results = []
+            for idx, code in enumerate(req.scheme_codes):
+                series = load_nav_series(code, req.start_date, req.end_date)
+                if len(series) < 2:
+                    raise ValueError(f"Scheme {code} has insufficient data")
+                # Run comprehensive backtest for this fund with its allocation as monthly SIP
+                res = comprehensive_backtest(
+                    series=series,
+                    investment_type="sip",
+                    sip_amount=req.allocations[idx],
+                    scheme_name=scheme_names[code]
+                )
+                # Append total_invested from this fund for overall sum
+                individual_results.append(res)
+            # Combine portfolio values across all funds by summing on each date
+            total_by_date = {}
+            for res in individual_results:
+                for d, val in zip(res["nav_dates"], res["portfolio_values"]):
+                    total_by_date[d] = total_by_date.get(d, 0.0) + val
+            # Sort dates
+            sorted_dates = sorted(total_by_date.keys())
+            combined_values = [total_by_date[d] for d in sorted_dates]
+            # Total invested is sum of individual total_invested
+            total_invested_portfolio = sum(res["total_invested"] for res in individual_results)
+            # Monthly SIP total for the portfolio (constant across funds)
+            monthly_sip_total = sum(req.allocations)
+            # Compute metrics
+            result = _compute_metrics_from_portfolio_values(
+                combined_values,
+                sorted_dates,
+                total_invested_portfolio,
+                req.investment_type,
+                portfolio_name,
+                sip_monthly_amount=monthly_sip_total
+            )
+            return result
+            
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Portfolio backtest failed: {str(e)}")
 
 
 @app.post("/api/analyze-correlation")
