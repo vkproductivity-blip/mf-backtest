@@ -678,3 +678,36 @@ td {
    background: rgba(255, 98, 125, 0.15);
    border-color: #ff637d;
  }
+
+ .search-with-clear {
+   position: relative;
+   display: flex;
+   align-items: center;
+ }
+
+ .search-with-clear .search-input {
+   flex: 1;
+   padding-right: 36px;
+ }
+
+ .search-with-clear .clear-btn {
+   position: absolute;
+   right: 10px;
+   width: 22px;
+   height: 22px;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   border: none;
+   border-radius: 50%;
+   background: rgba(255, 255, 255, 0.1);
+   color: #b8c5d8;
+   font-size: 0.8rem;
+   cursor: pointer;
+   transition: all 0.2s;
+ }
+
+ .search-with-clear .clear-btn:hover {
+   background: rgba(255, 98, 125, 0.2);
+   color: #ff637d;
+ }

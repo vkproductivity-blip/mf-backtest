@@ -437,44 +437,68 @@ export default function Home() {
 
                    {analysisMode === 'single' ? (
                      <>
-                       <div className="field-group">
-                         <label>Mutual Fund Scheme</label>
-                         <input
-                           type="text"
-                           value={schemeQuery}
-                           onChange={(event) => handleInput('schemeCode', event.target.value)}
-                           placeholder="Search by scheme code or name"
-                           className="search-input"
-                         />
-                         {showSearch && searchResults.length > 0 && (
-                           <div className="search-dropdown">
-                             {searchResults.map((item) => (
-                               <button
-                                 key={item.scheme_code}
-                                 type="button"
-                                 className="search-item"
-                                 onClick={() => selectedScheme(item.scheme_code, item.scheme_name)}
-                               >
-                                 <span>{item.scheme_code}</span>
-                                 <small>{item.scheme_name}</small>
-                               </button>
-                             ))}
-                           </div>
-                         )}
+                   <div className="field-group">
+                     <label>Mutual Fund Scheme</label>
+                     <div className="search-with-clear">
+                       <input
+                         type="text"
+                         value={schemeQuery}
+                         onChange={(event) => handleInput('schemeCode', event.target.value)}
+                         placeholder="Search by scheme code or name"
+                         className="search-input"
+                       />
+                       {schemeQuery && (
+                         <button
+                           type="button"
+                           className="clear-btn"
+                           onClick={() => { setSchemeQuery(''); setForm((c) => ({...c, schemeCode: ''})); }}
+                           title="Clear"
+                         >
+                           ✕
+                         </button>
+                       )}
+                     </div>
+                     {showSearch && searchResults.length > 0 && (
+                       <div className="search-dropdown">
+                         {searchResults.map((item) => (
+                           <button
+                             key={item.scheme_code}
+                             type="button"
+                             className="search-item"
+                             onClick={() => selectedScheme(item.scheme_code, item.scheme_name)}
+                           >
+                             <span>{item.scheme_code}</span>
+                             <small>{item.scheme_name}</small>
+                           </button>
+                         ))}
                        </div>
+                     )}
+                   </div>
                      </>
                    ) : (
                      <>
                        {/* Portfolio Search */}
                        <div className="field-group">
                          <label>Add Mutual Fund to Portfolio</label>
-                         <input
-                           type="text"
-                           value={portfolioQuery}
-                           onChange={(event) => { setPortfolioQuery(event.target.value); setShowPortfolioSearch(true); }}
-                           placeholder="Search by scheme code or name"
-                           className="search-input"
-                         />
+                         <div className="search-with-clear">
+                           <input
+                             type="text"
+                             value={portfolioQuery}
+                             onChange={(event) => { setPortfolioQuery(event.target.value); setShowPortfolioSearch(true); }}
+                             placeholder="Search by scheme code or name"
+                             className="search-input"
+                           />
+                           {portfolioQuery && (
+                             <button
+                               type="button"
+                               className="clear-btn"
+                               onClick={() => { setPortfolioQuery(''); setPortfolioSearchResults([]); }}
+                               title="Clear"
+                             >
+                               ✕
+                             </button>
+                           )}
+                         </div>
                          {showPortfolioSearch && portfolioSearchResults.length > 0 && (
                            <div className="search-dropdown">
                              {portfolioSearchResults.map((item) => (

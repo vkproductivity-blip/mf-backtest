@@ -653,6 +653,80 @@ def api_backtest(req: BacktestRequest):
         raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
 
 
+@app.get("/api/schemes/search")
+def api_schemes_search(
+    q: Optional[str] = Query(default=None, description="Search substring in scheme name"),
+    limit: int = 50,
+    offset: int = 0,
+):
+    """Search schemes with autocomplete (used by frontend)"""
+    conn = db_conn()
+    cur = conn.cursor()
+
+    if q:
+        cur.execute(
+            """
+            SELECT scheme_code, scheme_name
+            FROM schemes
+            WHERE scheme_name LIKE ? OR scheme_code LIKE ?
+            ORDER BY scheme_name
+            LIMIT ? OFFSET ?;
+            """,
+            (f"%{q}%", f"{q}%", limit, offset),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT scheme_code, scheme_name
+            FROM schemes
+            ORDER BY scheme_name
+            LIMIT ? OFFSET ?;
+            """,
+            (limit, offset),
+        )
+
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"count": len(rows), "items": rows}
+
+
+@app.get("/api/schemes/search")
+def api_schemes_search(
+    q: Optional[str] = Query(default=None, description="Search substring in scheme name"),
+    limit: int = 50,
+    offset: int = 0,
+):
+    """Search schemes with autocomplete (used by frontend)"""
+    conn = db_conn()
+    cur = conn.cursor()
+
+    if q:
+        cur.execute(
+            """
+            SELECT scheme_code, scheme_name
+            FROM schemes
+            WHERE scheme_name LIKE ? OR scheme_code LIKE ?
+            ORDER BY scheme_name
+            LIMIT ? OFFSET ?;
+            """,
+            (f"%{q}%", f"{q}%", limit, offset),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT scheme_code, scheme_name
+            FROM schemes
+            ORDER BY scheme_name
+            LIMIT ? OFFSET ?;
+            """,
+            (limit, offset),
+        )
+
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"count": len(rows), "items": rows}
+
+
 @app.get("/schemes")
 def list_schemes(
     q: Optional[str] = Query(default=None, description="Search substring in scheme name"),
