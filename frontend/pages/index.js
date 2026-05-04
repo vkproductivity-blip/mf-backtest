@@ -13,7 +13,6 @@ import {
   Filler,
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
-import PopularFundsSidebar from '../components/PopularFundsSidebar';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip, Legend, Filler);
 
@@ -69,6 +68,184 @@ const buildInvestedSeries = (backtest) => {
   });
 };
 
+function BacktestResult({ result }) {
+  const [activeTab, setActiveTab] = useState('statistics');
+  const chartData = useMemo(() => {
+    if (!result) return null;
+    return {
+      labels: result.nav_dates.map(
+        (dateString) => new Date(dateString).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+      ),
+      portfolio: result.portfolio_values,
+      invested: buildInvestedSeries(result),
+      returns: result.daily_returns,
+    };
+  }, [result]);
+
+  const statisticsRows = useMemo(() => {
+    if (!result) return [];
+    return [
+      { label: 'Scheme', value: result.scheme_name },
+      {
+        label: 'Period',
+        value: `${new Date(result.start_date).toLocaleDateString()} -> ${new Date(result.end_date).toLocaleDateString()}`,
+      },
+      { label: 'Investment Type', value: result.investment_type === 'sip' ? 'SIP' : 'Lump Sum' },
+      { label: 'Data Points', value: result.nav_dates.length },
+      { label: 'Trading Days', value: result.total_trading_days },
+    ];
+  }, [result]);
+
+  const riskRows = useMemo(() => {
+    if (!result) return [];
+    return [
+      { label: 'Max Drawdown', value: formatPercent(result.max_drawdown) },
+      { label: 'Volatility', value: formatPercent(result.volatility) },
+      { label: 'Sharpe Ratio', value: Number(result.sharpe_ratio || 0).toFixed(2) },
+      { label: 'Positive Days', value: `${result.positive_days}/${result.total_trading_days}` },
+    ];
+  }, [result]);
+
+  const performanceRows = useMemo(() => {
+    if (!result) return [];
+    return [
+      { label: 'Average Daily Return', value: formatPercent(result.avg_daily_return) },
+      { label: 'Best Day', value: formatPercent(result.best_day_return) },
+      { label: 'Worst Day', value: formatPercent(result.worst_day_return) },
+      { label: 'Final Value', value: formatCurrency(result.final_value) },
+    ];
+  }, [result]);
+
+  const MetricTable = ({ rows }) => (
+    <div className="glass-panel table-panel">
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              <td>{row.label}</td>
+              <td>{row.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  if (!result) return null;
+
+  return (
+    <>
+      <section className="chart-section">
+        <div className="glass-panel chart-card">
+          <div className="panel-heading split">
+            <div>
+              <p className="panel-title">Portfolio Growth</p>
+              <p className="panel-subtitle">Compare invested capital with actual portfolio value over time.</p>
+            </div>
+          </div>
+          <div className="chart-frame">
+            <Line
+              data={{
+                labels: chartData.labels,
+                datasets: [
+                  {
+                    label: 'Portfolio Value',
+                    data: chartData.portfolio,
+                    borderColor: '#79c0ff',
+                    backgroundColor: 'rgba(121, 192, 255, 0.12)',
+                    fill: true,
+                    tension: 0.35,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    borderWidth: 2,
+                  },
+                  {
+                    label: 'Invested Amount',
+                    data: chartData.invested,
+                    borderColor: '#ffbf69',
+                    borderDash: [8, 6],
+                    fill: false,
+                    tension: 0.2,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    borderWidth: 2,
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { labels: { color: '#cad6f0' } } },
+                scales: {
+                  x: { ticks: { color: '#a5b3cc', maxTicksLimit: 8 }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
+                  y: { ticks: { color: '#a5b3cc' }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
+                },
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="glass-panel chart-card">
+          <div className="panel-heading split">
+            <div>
+              <p className="panel-title">Daily Returns</p>
+              <p className="panel-subtitle">See up days and down days quickly.</p>
+            </div>
+          </div>
+          <div className="chart-frame">
+            <Bar
+              data={{
+                labels: chartData.labels.slice(1),
+                datasets: [
+                  {
+                    label: 'Daily Return',
+                    data: chartData.returns.map((value) => value * 100),
+                    backgroundColor: chartData.returns.map((value) => (value >= 0 ? '#78d9a4' : '#ff637d')),
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: { ticks: { color: '#a5b3cc', maxTicksLimit: 8 }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
+                  y: { ticks: { color: '#a5b3cc', callback: (value) => `${value}%` }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
+                },
+              }}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="metric-tabs">
+        <div className="tab-bar">
+          {['statistics', 'risk', 'performance'].map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className={tab === activeTab ? 'tab active' : 'tab'}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <div className="tab-panel">
+          {activeTab === 'statistics' && <MetricTable rows={statisticsRows} />}
+          {activeTab === 'risk' && <MetricTable rows={riskRows} />}
+          {activeTab === 'performance' && <MetricTable rows={performanceRows} />}
+        </div>
+      </section>
+    </>
+  );
+}
+
 export default function Home() {
   const [form, setForm] = useState(defaultStats);
   const [searchResults, setSearchResults] = useState([]);
@@ -89,6 +266,15 @@ export default function Home() {
   const [portfolioInvestmentType, setPortfolioInvestmentType] = useState('lump-sum');
   const [showPortfolioSearch, setShowPortfolioSearch] = useState(false);
   const portfolioSearchTimer = useRef(null);
+
+  // Compare mode state
+  const [compareFunds, setCompareFunds] = useState([]);
+  const [compareQuery, setCompareQuery] = useState('');
+  const [compareSearchResults, setCompareSearchResults] = useState([]);
+  const [showCompareSearch, setShowCompareSearch] = useState(false);
+  const [compareInvestmentType, setCompareInvestmentType] = useState('lump-sum');
+  const compareSearchTimer = useRef(null);
+  const [compareResults, setCompareResults] = useState(null);
 
   useEffect(() => {
     const today = new Date();
@@ -154,6 +340,33 @@ export default function Home() {
     return () => clearTimeout(portfolioSearchTimer.current);
   }, [portfolioQuery]);
 
+  useEffect(() => {
+    if (!compareQuery || compareQuery.length < 2) {
+      setCompareSearchResults([]);
+      return;
+    }
+
+    if (compareSearchTimer.current) {
+      clearTimeout(compareSearchTimer.current);
+    }
+
+    compareSearchTimer.current = setTimeout(async () => {
+      try {
+        const response = await fetch(buildApiUrl(`/api/schemes/search?q=${encodeURIComponent(compareQuery)}`));
+        if (!response.ok) {
+          throw new Error('Unable to search schemes');
+        }
+        const results = await response.json();
+        setCompareSearchResults(results.items.slice(0, 10));
+      } catch (error) {
+        console.error(error);
+        setCompareSearchResults([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(compareSearchTimer.current);
+  }, [compareQuery]);
+
   const selectedScheme = (schemeCode, schemeName) => {
     setForm((current) => ({
       ...current,
@@ -168,11 +381,10 @@ export default function Home() {
   // Portfolio functions
   const addFundToPortfolio = (schemeCode, schemeName) => {
     setPortfolioFunds((current) => {
-      // Avoid duplicates
       if (current.some((f) => f.code === schemeCode)) {
         return current;
       }
-      return [...current, { code: schemeCode, name: schemeName, amount: 10000 }];
+      return [...current, { code: schemeCode, name: schemeName, amount: 10000, start_date: form.startDate, end_date: form.endDate }];
     });
     setPortfolioQuery('');
     setPortfolioSearchResults([]);
@@ -186,6 +398,46 @@ export default function Home() {
   const updateFundAmount = (index, amount) => {
     setPortfolioFunds((current) =>
       current.map((fund, i) => (i === index ? { ...fund, amount: amount || 0 } : fund))
+    );
+  };
+
+  // Compare functions
+  const selectSchemeForCompare = (schemeCode, schemeName) => {
+    if (compareFunds.length >= 5) {
+      showAlert('warning', 'Maximum 5 funds allowed for comparison.');
+      return;
+    }
+    setCompareFunds((current) => {
+      if (current.some((f) => f.code === schemeCode)) {
+        showAlert('warning', 'Fund already added.');
+        return current;
+      }
+      return [...current, { code: schemeCode, name: schemeName, amount: 10000, start_date: form.startDate, end_date: form.endDate }];
+    });
+    setCompareQuery('');
+    setCompareSearchResults([]);
+    setShowCompareSearch(false);
+  };
+
+  const removeFundFromCompare = (index) => {
+    setCompareFunds((current) => current.filter((_, i) => i !== index));
+  };
+
+  const updateCompareFundAmount = (index, amount) => {
+    setCompareFunds((current) =>
+      current.map((fund, i) => (i === index ? { ...fund, amount: amount || 0 } : fund))
+    );
+  };
+
+  const updateCompareFundStartDate = (index, date) => {
+    setCompareFunds((current) =>
+      current.map((fund, i) => (i === index ? { ...fund, start_date: date } : fund))
+    );
+  };
+
+  const updateCompareFundEndDate = (index, date) => {
+    setCompareFunds((current) =>
+      current.map((fund, i) => (i === index ? { ...fund, end_date: date } : fund))
     );
   };
 
@@ -240,10 +492,36 @@ export default function Home() {
         showAlert('warning', `Amount for ${fund.name} must be greater than zero.`);
         return false;
       }
+      if (!fund.start_date || !fund.end_date) {
+        showAlert('warning', `Select start and end dates for ${fund.name}.`);
+        return false;
+      }
+      if (new Date(fund.start_date) >= new Date(fund.end_date)) {
+        showAlert('warning', `Start date must be before end date for ${fund.name}.`);
+        return false;
+      }
     }
-    if (new Date(form.startDate) >= new Date(form.endDate)) {
-      showAlert('warning', 'Start date must be before end date.');
+    return true;
+  };
+
+  const validateCompare = () => {
+    if (compareFunds.length < 2) {
+      showAlert('warning', 'Add at least 2 funds to compare.');
       return false;
+    }
+    for (const fund of compareFunds) {
+      if (!fund.amount || fund.amount <= 0) {
+        showAlert('warning', `Amount for ${fund.name} must be greater than zero.`);
+        return false;
+      }
+      if (!fund.start_date || !fund.end_date) {
+        showAlert('warning', `Select start and end dates for ${fund.name}.`);
+        return false;
+      }
+      if (new Date(fund.start_date) >= new Date(fund.end_date)) {
+        showAlert('warning', `Start date must be before end date for ${fund.name}.`);
+        return false;
+      }
     }
     return true;
   };
@@ -251,12 +529,15 @@ export default function Home() {
   const runAnalysis = async () => {
     if (analysisMode === 'single') {
       if (!validateForm()) return;
-    } else {
+    } else if (analysisMode === 'portfolio') {
       if (!validatePortfolio()) return;
+    } else if (analysisMode === 'compare') {
+      if (!validateCompare()) return;
     }
     clearAlerts();
     setLoading(true);
     setBacktest(null);
+    setCompareResults(null);
 
     let payload, endpoint;
     if (analysisMode === 'single') {
@@ -269,14 +550,28 @@ export default function Home() {
         lumpsum_amount: form.investmentType === 'lump-sum' ? Number(form.investmentAmount) : undefined,
         sip_amount: form.investmentType === 'sip' ? Number(form.sipAmount) : undefined,
       };
-    } else {
+    } else if (analysisMode === 'portfolio') {
       endpoint = '/api/portfolio-backtest';
       payload = {
         scheme_codes: portfolioFunds.map((f) => f.code),
         allocations: portfolioFunds.map((f) => Number(f.amount)),
-        start_date: form.startDate,
-        end_date: form.endDate,
         investment_type: portfolioInvestmentType,
+        scheme_dates: portfolioFunds.map((f) => ({
+          scheme_code: f.code,
+          start_date: f.start_date,
+          end_date: f.end_date,
+        })),
+      };
+    } else if (analysisMode === 'compare') {
+      endpoint = '/api/compare-detailed';
+      payload = {
+        funds: compareFunds.map((f) => ({
+          scheme_code: f.code,
+          start_date: f.start_date,
+          end_date: f.end_date,
+          amount: Number(f.amount),
+        })),
+        investment_type: compareInvestmentType,
       };
     }
 
@@ -290,8 +585,15 @@ export default function Home() {
       if (!response.ok) {
         throw new Error(data.detail || 'Analysis failed');
       }
-      setBacktest(data);
-      showAlert('success', analysisMode === 'single' ? 'Backtest complete. Review the interactive dashboard below.' : 'Portfolio analysis complete.');
+      if (analysisMode === 'compare') {
+        setCompareResults(data);
+      } else {
+        setBacktest(data);
+      }
+      showAlert('success', 
+        analysisMode === 'single' ? 'Backtest complete.' :
+        analysisMode === 'portfolio' ? 'Portfolio analysis complete.' :
+        'Comparison complete.');
     } catch (error) {
       console.error(error);
       showAlert('error', error.message || 'Request failed');
@@ -299,6 +601,7 @@ export default function Home() {
       setLoading(false);
       setShowSearch(false);
       setShowPortfolioSearch(false);
+      setShowCompareSearch(false);
     }
   };
 
@@ -313,9 +616,13 @@ export default function Home() {
     setSchemeQuery('');
     setSearchResults([]);
     setBacktest(null);
+    setCompareResults(null);
     setPortfolioFunds([]);
     setPortfolioQuery('');
     setPortfolioSearchResults([]);
+    setCompareFunds([]);
+    setCompareQuery('');
+    setCompareSearchResults([]);
     clearAlerts();
   };
 
@@ -403,8 +710,8 @@ export default function Home() {
 
           <div className="dashboard-layout">
             <div className="dashboard-main">
-              <section className="grid-2-up">
-                <article className="glass-panel form-panel">
+               <section className={analysisMode === 'compare' ? 'grid-1-up' : 'grid-2-up'}>
+                 <article className="glass-panel form-panel">
                    <div className="panel-heading">
                      <div>
                        <p className="panel-title">{analysisMode === 'single' ? 'Backtest Parameters' : 'Portfolio Builder'}</p>
@@ -413,47 +720,70 @@ export default function Home() {
                      <span className="chip">Interactive</span>
                    </div>
 
-                   {/* Mode Toggle */}
-                   <div className="mode-toggle">
-                     <button
-                       type="button"
-                       className={`mode-btn ${analysisMode === 'single' ? 'active' : ''}`}
-                       onClick={() => setAnalysisMode('single')}
-                     >
-                       Single Fund
-                     </button>
-                     <button
-                       type="button"
-                       className={`mode-btn ${analysisMode === 'portfolio' ? 'active' : ''}`}
-                       onClick={() => setAnalysisMode('portfolio')}
-                     >
-                       Portfolio
-                     </button>
-                   </div>
+                    {/* Mode Toggle */}
+                    <div className="mode-toggle">
+                      <button
+                        type="button"
+                        className={`mode-btn ${analysisMode === 'single' ? 'active' : ''}`}
+                        onClick={() => setAnalysisMode('single')}
+                      >
+                        Single Fund
+                      </button>
+                      <button
+                        type="button"
+                        className={`mode-btn ${analysisMode === 'portfolio' ? 'active' : ''}`}
+                        onClick={() => setAnalysisMode('portfolio')}
+                      >
+                        Portfolio
+                      </button>
+                      <button
+                        type="button"
+                        className={`mode-btn ${analysisMode === 'compare' ? 'active' : ''}`}
+                        onClick={() => setAnalysisMode('compare')}
+                      >
+                        Compare
+                      </button>
+                    </div>
 
                    {analysisMode === 'single' ? (
                      <>
-                   <div className="field-group">
-                     <label>Mutual Fund Scheme</label>
-                     <div className="search-with-clear">
-                       <input
-                         type="text"
-                         value={schemeQuery}
-                         onChange={(event) => handleInput('schemeCode', event.target.value)}
-                         placeholder="Search by scheme code or name"
-                         className="search-input"
-                       />
-                       {schemeQuery && (
-                         <button
-                           type="button"
-                           className="clear-btn"
-                           onClick={() => { setSchemeQuery(''); setForm((c) => ({...c, schemeCode: ''})); }}
-                           title="Clear"
-                         >
-                           ✕
-                         </button>
-                       )}
-                     </div>
+                        <div className="field-group">
+                          <label>Add Fund to Compare</label>
+                          <div className="search-with-clear">
+                            <input
+                              type="text"
+                              value={compareQuery}
+                              onChange={(e) => { setCompareQuery(e.target.value); setShowCompareSearch(true); }}
+                              placeholder="Search by scheme code or name"
+                              className="search-input"
+                            />
+                            {compareQuery && (
+                              <button
+                                type="button"
+                                className="clear-btn"
+                                onClick={() => setCompareQuery('')}
+                                title="Clear"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                          {showCompareSearch && compareSearchResults.length > 0 && (
+                            <div className="search-dropdown">
+                              {compareSearchResults.map((item) => (
+                                <button
+                                  key={item.scheme_code}
+                                  type="button"
+                                  className="search-item"
+                                  onClick={() => selectSchemeForCompare(item.scheme_code, item.scheme_name)}
+                                >
+                                  <span>{item.scheme_code}</span>
+                                  <small>{item.scheme_name}</small>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                      {showSearch && searchResults.length > 0 && (
                        <div className="search-dropdown">
                          {searchResults.map((item) => (
@@ -589,170 +919,84 @@ export default function Home() {
                            min="100"
                            step="100"
                          />
-                       </div>
-                     </div>
-                   )}
+            </div>
+          </div>
 
-                   <div className="button-row">
-                     <button className="btn btn-primary" onClick={runAnalysis} disabled={loading}>
-                       {loading ? 'Running...' : (analysisMode === 'single' ? 'Run Backtest' : 'Analyze Portfolio')}
-                     </button>
-                     <button className="btn btn-secondary" onClick={resetForm} disabled={loading}>
-                       Reset
-                     </button>
-                   </div>
+            {analysisMode !== 'compare' && backtest && <BacktestResult result={backtest} />}
+            {analysisMode === 'compare' && compareResults && compareResults.results && (
+              <div className="compare-results-grid">
+                {compareResults.results.map((result) => (
+                  <BacktestResult key={result.scheme_code} result={result} />
+                ))}
+              </div>
+            )}
+
+                    <div className="button-row">
+                      <button className="btn btn-primary" onClick={runAnalysis} disabled={loading}>
+                        {loading ? 'Running...' : 
+                         analysisMode === 'single' ? 'Run Backtest' :
+                         analysisMode === 'portfolio' ? 'Analyze Portfolio' :
+                         'Compare Funds'}
+                      </button>
+                      <button className="btn btn-secondary" onClick={resetForm} disabled={loading}>
+                        Reset
+                      </button>
+                    </div>
 
                   <div className="hint-box">
                     <strong>Tip:</strong> pick a scheme from autocomplete so the public deployment always sends a valid scheme code.
                   </div>
                 </article>
 
-                <article className="glass-panel summary-panel">
-                  <div className="panel-heading">
-                    <div>
-                      <p className="panel-title">Live Summary</p>
-                      <p className="panel-subtitle">Results update after each successful run.</p>
+                {analysisMode !== 'compare' && (
+                  <article className="glass-panel summary-panel">
+                    <div className="panel-heading">
+                      <div>
+                        <p className="panel-title">Live Summary</p>
+                        <p className="panel-subtitle">Results update after each successful run.</p>
+                      </div>
+                      <span className="badge">Public Ready</span>
                     </div>
-                    <span className="badge">Public Ready</span>
-                  </div>
 
-                  <div className="metrics-grid">
-                    {summaryCards.length > 0 ? (
-                      summaryCards.map((card) => (
-                        <div key={card.label} className={`metric-card ${card.tone}`}>
-                          <p className="metric-label">{card.label}</p>
-                          <p className="metric-value">{card.value}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="empty-state">Run a backtest to see performance metrics instantly.</div>
+                    <div className="metrics-grid">
+                      {summaryCards.length > 0 ? (
+                        summaryCards.map((card) => (
+                          <div key={card.label} className={`metric-card ${card.tone}`}>
+                            <p className="metric-label">{card.label}</p>
+                            <p className="metric-value">{card.value}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="empty-state">Run a backtest to see performance metrics instantly.</div>
+                      )}
+                    </div>
+
+                    {backtest && (
+                      <div className="info-block">
+                        <p className="info-label">Scheme</p>
+                        <p>{backtest.scheme_name}</p>
+                        <p className="info-label">Period</p>
+                        <p>{`${new Date(backtest.start_date).toLocaleDateString()} -> ${new Date(backtest.end_date).toLocaleDateString()}`}</p>
+                      </div>
                     )}
-                  </div>
+                  </article>
+                )}
+            </section>
 
-                  {backtest && (
-                    <div className="info-block">
-                      <p className="info-label">Scheme</p>
-                      <p>{backtest.scheme_name}</p>
-                      <p className="info-label">Period</p>
-                      <p>{`${new Date(backtest.start_date).toLocaleDateString()} -> ${new Date(backtest.end_date).toLocaleDateString()}`}</p>
-                    </div>
-                  )}
-                </article>
-              </section>
-
-              {backtest && (
-                <section className="chart-section">
-                  <div className="glass-panel chart-card">
-                    <div className="panel-heading split">
-                      <div>
-                        <p className="panel-title">Portfolio Growth</p>
-                        <p className="panel-subtitle">Compare invested capital with actual portfolio value over time.</p>
-                      </div>
-                    </div>
-                    <div className="chart-frame">
-                      <Line
-                        data={{
-                          labels: chartData.labels,
-                          datasets: [
-                            {
-                              label: 'Portfolio Value',
-                              data: chartData.portfolio,
-                              borderColor: '#79c0ff',
-                              backgroundColor: 'rgba(121, 192, 255, 0.12)',
-                              fill: true,
-                              tension: 0.35,
-                              pointRadius: 0,
-                              pointHoverRadius: 5,
-                              borderWidth: 2,
-                            },
-                            {
-                              label: 'Invested Amount',
-                              data: chartData.invested,
-                              borderColor: '#ffbf69',
-                              borderDash: [8, 6],
-                              fill: false,
-                              tension: 0.2,
-                              pointRadius: 0,
-                              pointHoverRadius: 4,
-                              borderWidth: 2,
-                            },
-                          ],
-                        }}
-                        options={{
-                          responsive: true,
-                          interaction: { mode: 'index', intersect: false },
-                          plugins: {
-                            legend: { labels: { color: '#cad6f0' } },
-                          },
-                          scales: {
-                            x: { ticks: { color: '#a5b3cc', maxTicksLimit: 8 }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
-                            y: { ticks: { color: '#a5b3cc' }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
-                          },
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="glass-panel chart-card">
-                    <div className="panel-heading split">
-                      <div>
-                        <p className="panel-title">Daily Returns</p>
-                        <p className="panel-subtitle">See up days and down days quickly.</p>
-                      </div>
-                    </div>
-                    <div className="chart-frame">
-                      <Bar
-                        data={{
-                          labels: chartData.labels.slice(1),
-                          datasets: [
-                            {
-                              label: 'Daily Return',
-                              data: chartData.returns.map((value) => value * 100),
-                              backgroundColor: chartData.returns.map((value) => (value >= 0 ? '#78d9a4' : '#ff637d')),
-                            },
-                          ],
-                        }}
-                        options={{
-                          responsive: true,
-                          plugins: {
-                            legend: { display: false },
-                          },
-                          scales: {
-                            x: { ticks: { color: '#a5b3cc', maxTicksLimit: 8 }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
-                            y: { ticks: { color: '#a5b3cc', callback: (value) => `${value}%` }, grid: { color: 'rgba(121, 192, 255, 0.08)' } },
-                          },
-                        }}
-                      />
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {backtest && (
-                <section className="metric-tabs">
-                  <div className="tab-bar">
-                    {['statistics', 'risk', 'performance'].map((tab) => (
-                      <button
-                        key={tab}
-                        type="button"
-                        className={tab === activeTab ? 'tab active' : 'tab'}
-                        onClick={() => setActiveTab(tab)}
-                      >
-                        {tab.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="tab-panel">
-                    {activeTab === 'statistics' && <MetricTable rows={statisticsRows} />}
-                    {activeTab === 'risk' && <MetricTable rows={riskRows} />}
-                    {activeTab === 'performance' && <MetricTable rows={performanceRows} />}
-                  </div>
-                </section>
-              )}
+            {backtest && <BacktestResult result={backtest} />}
+            {compareResults && compareResults.results && (
+              <div className="compare-results-grid">
+                {compareResults.results.map((result) => (
+                  <BacktestResult key={result.scheme_code} result={result} />
+                ))}
+              </div>
+            )}
             </div>
 
             <PopularFundsSidebar />
+            </div>
+          </div>
+
           </div>
         </div>
       </div>

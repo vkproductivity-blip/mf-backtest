@@ -779,12 +779,19 @@ class ComparisonRequest(BaseModel):
     sip_amount: Optional[float] = 5000
 
 
+class SchemeDateRange(BaseModel):
+    scheme_code: int
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
 class PortfolioRequest(BaseModel):
     scheme_codes: List[int]  # 2-5 schemes
     allocations: List[float]  # amount for each scheme (lump) or monthly SIP amount per scheme
     start_date: str  # YYYY-MM-DD
     end_date: str    # YYYY-MM-DD
     investment_type: str = "lump-sum"  # "lump-sum" or "sip"
+    scheme_dates: Optional[List[SchemeDateRange]] = None
 
 
 class AnalysisRequest(BaseModel):
@@ -961,10 +968,26 @@ def api_portfolio_backtest(req: PortfolioRequest):
             raise ValueError("Number of schemes must match number of allocations")
         if any(a <= 0 for a in req.allocations):
             raise ValueError("Allocations must be positive")
-        
         if req.investment_type not in ["lump-sum", "sip"]:
             raise ValueError("investment_type must be 'lump-sum' or 'sip'")
-        
+
+        # Build effective date ranges per scheme
+        scheme_dates_map = {}
+        if req.scheme_dates:
+            for sd in req.scheme_dates:
+                scheme_dates_map[sd.scheme_code] = (sd.start_date, sd.end_date)
+
+        effective_ranges = []  # list of (code, start_date, end_date)
+        for code in req.scheme_codes:
+            if code in scheme_dates_map:
+                start_d, end_d = scheme_dates_map[code]
+                if not start_d or not end_d:
+                    raise ValueError(f"Missing start or end date for scheme {code}")
+            else:
+                start_d = req.start_date
+                end_d = req.end_date
+            effective_ranges.append((code, start_d, end_d))
+
         # Fetch scheme names
         conn = db_conn()
         scheme_names = {}
@@ -976,123 +999,127 @@ def api_portfolio_backtest(req: PortfolioRequest):
                 raise ValueError(f"Scheme code {code} not found")
             scheme_names[code] = row["scheme_name"]
         conn.close()
-        
+
         total_invested = sum(req.allocations)
-        portfolio_name = f"Portfolio: " + ", ".join([f"{name} ({code})" for code, name in scheme_names.items()])
-        
+        portfolio_name = f"Portfolio: " + ", ".join([f"{scheme_names[code]} ({code})" for code in req.scheme_codes])
+
         # LUMP-SUM Portfolio
         if req.investment_type == "lump-sum":
-            # Load NAV series for each scheme
+            # Load series and compute start NAV and nav maps per scheme
             all_series = {}
-            for code in req.scheme_codes:
-                series = load_nav_series(code, req.start_date, req.end_date)
+            all_nav_maps = {}
+            start_navs = {}
+            fund_start_dates = {}  # first date for each scheme's series
+
+            for idx, (code, start_d, end_d) in enumerate(effective_ranges):
+                series = load_nav_series(code, start_d, end_d)
+                # Auto-sync if insufficient data
                 if len(series) < 2:
-                    # Auto-sync: fetch data from external API
                     try:
+                        print(f"Auto-syncing for scheme {code}...")
                         sync_history_for_scheme(code, None, None, sleep_s=0.1)
-                        series = load_nav_series(code, req.start_date, req.end_date)
+                        series = load_nav_series(code, start_d, end_d)
                         print(f"After auto-sync: {len(series)} NAV records for {code}")
                     except Exception as sync_error:
+                        print(f"Sync failed: {sync_error}")
                         raise ValueError(f"Failed to sync data for scheme {code}: {str(sync_error)}")
-                    # If still insufficient data, try using most recent year available
                     if len(series) < 2:
-                        all_series_tmp = load_nav_series(code, None, None)
-                        if all_series_tmp:
-                            latest_date = max(d for d, _ in all_series_tmp)
+                        all_tmp = load_nav_series(code, None, None)
+                        if all_tmp:
+                            latest_date = max(d for d, _ in all_tmp)
                             fallback_start = (latest_date - timedelta(days=365)).isoformat()
                             series = load_nav_series(code, fallback_start, latest_date.isoformat())
-                            print(f"Using recent data for scheme {code}: {len(series)} records from {fallback_start} to {latest_date.isoformat()}")
+                            print(f"Using recent data for {code}: {len(series)} records")
                             if len(series) < 2:
                                 raise ValueError(f"Scheme {code} has insufficient data even after auto-sync")
                         else:
                             raise ValueError(f"Scheme {code} has no NAV data available")
                 all_series[code] = series
-            
-            # Find common dates across all series
-            date_sets = [set(d for d, _ in all_series[code]) for code in req.scheme_codes]
-            common_dates = sorted(set.intersection(*date_sets))
-            if len(common_dates) < 2:
-                raise ValueError("No overlapping dates found across the selected schemes")
-            
-            # Build nav lookups and compute start NAV (on first common date) for each scheme
-            nav_lookups = {}
-            start_navs = {}
-            for code in req.scheme_codes:
-                nav_map = {d: nav for d, nav in all_series[code]}
-                nav_lookups[code] = nav_map
-                start_nav = nav_map[common_dates[0]]
+                nav_map = {d: nav for d, nav in series}
+                all_nav_maps[code] = nav_map
+                first_date = series[0][0]
+                start_nav = nav_map[first_date]
                 if start_nav <= 0:
                     raise ValueError(f"Invalid start NAV for scheme {code}")
                 start_navs[code] = start_nav
-            
-            # Build combined portfolio values: sum( allocation_i * nav_i(t) / start_nav_i )
+                fund_start_dates[code] = first_date
+
+            # Global dates: union of all dates from all series
+            global_dates_set = set()
+            for series in all_series.values():
+                for d, _ in series:
+                    global_dates_set.add(d)
+            global_dates = sorted(global_dates_set)
+            if len(global_dates) < 2:
+                raise ValueError("Insufficient combined date range across schemes")
+
+            # Forward-fill NAVs and compute combined portfolio value
+            current_navs = {code: None for code in req.scheme_codes}
             combined_values = []
-            for date in common_dates:
+            for date in global_dates:
                 total_val = 0.0
                 for idx, code in enumerate(req.scheme_codes):
                     alloc = req.allocations[idx]
-                    nav = nav_lookups[code][date]
-                    total_val += alloc * (nav / start_navs[code])
+                    if date >= fund_start_dates[code]:
+                        if date in all_nav_maps[code]:
+                            current_navs[code] = all_nav_maps[code][date]
+                        # else keep last forward-filled value
+                        if current_navs[code] is not None:
+                            total_val += alloc * (current_navs[code] / start_navs[code])
                 combined_values.append(total_val)
-            
+
             result = _compute_metrics_from_portfolio_values(
                 combined_values,
-                common_dates,
+                global_dates,
                 total_invested,
                 req.investment_type,
                 portfolio_name,
                 sip_monthly_amount=None
             )
             return result
-        
+
         # SIP Portfolio
-        else:  # sip
-            # For each scheme, run individual SIP backtest
+        else:
             individual_results = []
             for idx, code in enumerate(req.scheme_codes):
-                series = load_nav_series(code, req.start_date, req.end_date)
+                start_d, end_d = effective_ranges[idx][1], effective_ranges[idx][2]
+                series = load_nav_series(code, start_d, end_d)
                 if len(series) < 2:
-                    # Auto-sync: fetch data from external API
                     try:
+                        print(f"Auto-syncing for scheme {code}...")
                         sync_history_for_scheme(code, None, None, sleep_s=0.1)
-                        series = load_nav_series(code, req.start_date, req.end_date)
+                        series = load_nav_series(code, start_d, end_d)
                         print(f"After auto-sync: {len(series)} NAV records for {code}")
                     except Exception as sync_error:
                         raise ValueError(f"Failed to sync data for scheme {code}: {str(sync_error)}")
-                    # If still insufficient data, try using most recent year available
                     if len(series) < 2:
-                        all_series_tmp = load_nav_series(code, None, None)
-                        if all_series_tmp:
-                            latest_date = max(d for d, _ in all_series_tmp)
+                        all_tmp = load_nav_series(code, None, None)
+                        if all_tmp:
+                            latest_date = max(d for d, _ in all_tmp)
                             fallback_start = (latest_date - timedelta(days=365)).isoformat()
                             series = load_nav_series(code, fallback_start, latest_date.isoformat())
-                            print(f"Using recent data for scheme {code}: {len(series)} records from {fallback_start} to {latest_date.isoformat()}")
+                            print(f"Using recent data for {code}: {len(series)} records")
                             if len(series) < 2:
                                 raise ValueError(f"Scheme {code} has insufficient data even after auto-sync")
                         else:
                             raise ValueError(f"Scheme {code} has no NAV data available")
-                # Run comprehensive backtest for this fund with its allocation as monthly SIP
                 res = comprehensive_backtest(
                     series=series,
                     investment_type="sip",
                     sip_amount=req.allocations[idx],
                     scheme_name=scheme_names[code]
                 )
-                # Append total_invested from this fund for overall sum
                 individual_results.append(res)
-            # Combine portfolio values across all funds by summing on each date
+
+            # Combine portfolio values by date (union)
             total_by_date = {}
             for res in individual_results:
                 for d, val in zip(res["nav_dates"], res["portfolio_values"]):
                     total_by_date[d] = total_by_date.get(d, 0.0) + val
-            # Sort dates
             sorted_dates = sorted(total_by_date.keys())
             combined_values = [total_by_date[d] for d in sorted_dates]
-            # Total invested is sum of individual total_invested
             total_invested_portfolio = sum(res["total_invested"] for res in individual_results)
-            # Monthly SIP total for the portfolio (constant across funds)
             monthly_sip_total = sum(req.allocations)
-            # Compute metrics
             result = _compute_metrics_from_portfolio_values(
                 combined_values,
                 sorted_dates,
@@ -1102,7 +1129,7 @@ def api_portfolio_backtest(req: PortfolioRequest):
                 sip_monthly_amount=monthly_sip_total
             )
             return result
-            
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -1203,8 +1230,88 @@ def api_analyze_correlation(req: AnalysisRequest):
             }
         }
         
+   except ValueError as e:
+       raise HTTPException(status_code=400, detail=str(e))
+   except Exception as e:
+       raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+class CompareFundDetail(BaseModel):
+    scheme_code: int
+    start_date: str
+    end_date: str
+    amount: float
+
+
+class CompareDetailedRequest(BaseModel):
+    funds: List[CompareFundDetail]
+    investment_type: str = "lump-sum"
+
+
+@app.post("/api/compare-detailed")
+def api_compare_detailed(req: CompareDetailedRequest):
+    """
+    Compare multiple funds with individual date ranges and investment amounts.
+    Returns detailed backtest results for each fund.
+    """
+    try:
+        if len(req.funds) < 2 or len(req.funds) > 5:
+            raise ValueError("Number of funds must be between 2 and 5")
+        if req.investment_type not in ["lump-sum", "sip"]:
+            raise ValueError("investment_type must be 'lump-sum' or 'sip'")
+        
+        results = []
+        total_invested = sum(f.amount for f in req.funds)
+        conn = db_conn()
+        
+        for fund in req.funds:
+            # Get scheme name
+            cur = conn.cursor()
+            cur.execute("SELECT scheme_name FROM schemes WHERE scheme_code = ?", (fund.scheme_code,))
+            row = cur.fetchone()
+            if not row:
+                continue  # skip if not found
+            scheme_name = row["scheme_name"]
+            
+            # Load NAV series with auto-sync and fallback
+            series = load_nav_series(fund.scheme_code, fund.start_date, fund.end_date)
+            if len(series) < 2:
+                try:
+                    print(f"Auto-syncing for scheme {fund.scheme_code}...")
+                    sync_history_for_scheme(fund.scheme_code, None, None, sleep_s=0.1)
+                    series = load_nav_series(fund.scheme_code, fund.start_date, fund.end_date)
+                    print(f"After auto-sync: {len(series)} NAV records for {fund.scheme_code}")
+                except Exception as sync_error:
+                    print(f"Sync failed: {sync_error}")
+                    raise ValueError(f"Failed to sync data for scheme {fund.scheme_code}")
+                if len(series) < 2:
+                    all_tmp = load_nav_series(fund.scheme_code, None, None)
+                    if all_tmp:
+                        latest_date = max(d for d, _ in all_tmp)
+                        fallback_start = (latest_date - timedelta(days=365)).isoformat()
+                        series = load_nav_series(fund.scheme_code, fallback_start, latest_date.isoformat())
+                        print(f"Using recent data for {fund.scheme_code}: {len(series)} records")
+                        if len(series) < 2:
+                            raise ValueError(f"Scheme {fund.scheme_code} has insufficient data even after auto-sync")
+                    else:
+                        raise ValueError(f"Scheme {fund.scheme_code} has no NAV data available")
+            
+            # Run comprehensive backtest
+            result = comprehensive_backtest(
+                series=series,
+                investment_type=req.investment_type,
+                lumpsum_amount=fund.amount if req.investment_type == "lump-sum" else None,
+                sip_amount=fund.amount if req.investment_type == "sip" else None,
+                scheme_name=scheme_name
+            )
+            result["scheme_code"] = fund.scheme_code
+            results.append(result)
+        
+        conn.close()
+        return {"results": results, "count": len(results), "investment_type": req.investment_type}
+    
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Comparison failed: {str(e)}")
 

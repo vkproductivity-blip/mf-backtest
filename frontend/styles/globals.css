@@ -52,7 +52,7 @@ body {
 
 .dashboard-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: 1fr;
   gap: 28px;
   align-items: start;
 }
@@ -143,6 +143,13 @@ h1 {
 .grid-2-up {
   display: grid;
   grid-template-columns: 1fr 1.1fr;
+  gap: 26px;
+  margin-bottom: 28px;
+}
+
+.grid-1-up {
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 26px;
   margin-bottom: 28px;
 }
@@ -526,12 +533,7 @@ td {
     grid-template-columns: 1fr;
   }
 
-  .popular-funds-sidebar {
-    position: static;
-    width: 100%;
-    max-height: none;
-    margin-top: 28px;
-  }
+
 }
 
 @media (max-width: 1080px) {
@@ -844,9 +846,7 @@ td {
     border-radius: 12px;
   }
 
-  .popular-funds {
-    gap: 10px;
-  }
+
 }
 
  /* Portfolio Mode Styles */
@@ -885,14 +885,15 @@ td {
    overflow: hidden;
  }
 
- .portfolio-fund-row {
-   display: flex;
-   align-items: center;
-   gap: 12px;
-   padding: 10px 12px;
-   background: rgba(255, 255, 255, 0.03);
-   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
- }
+  .portfolio-fund-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-wrap: wrap;
+  }
 
  .portfolio-fund-row:last-child {
    border-bottom: none;
@@ -995,7 +996,132 @@ td {
    transition: all 0.2s;
  }
 
- .search-with-clear .clear-btn:hover {
-   background: rgba(255, 98, 125, 0.2);
-   color: #ff637d;
- }
+  .search-with-clear .clear-btn:hover {
+    background: rgba(255, 98, 125, 0.2);
+    color: #ff637d;
+  }
+
+/* Compare Results Grid */
+.compare-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+/* Fund Dates in rows */
+.fund-dates {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.date-field label {
+  font-size: 0.7rem;
+  color: #7d94b7;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.date-field input {
+  width: 110px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  color: #e5e8f0;
+  font-size: 0.85rem;
+}
+
+.date-field input:focus {
+  outline: none;
+  border-color: rgba(121, 192, 255, 0.5);
+}
+
+/* Compare Funds List */
+.compare-funds-list {
+  margin-bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.compare-fund-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+}
+
+.compare-fund-row:last-child {
+  border-bottom: none;
+}
+
+.compare-fund-row .fund-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.compare-fund-row .fund-info strong {
+  color: #e8f2ff;
+  font-size: 0.9rem;
+}
+
+.compare-fund-row .fund-info small {
+  color: #8a9bb8;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compare-fund-row .fund-alloc {
+  width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.compare-fund-row .fund-alloc label {
+  font-size: 0.7rem;
+  color: #7d94b7;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.compare-fund-row .fund-alloc input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  color: #e5e8f0;
+  font-size: 0.9rem;
+}
+
+.compare-fund-row .fund-alloc input:focus {
+  outline: none;
+  border-color: rgba(121, 192, 255, 0.5);
+}
+
+/* Responsive adjustments for rows */
+@media (max-width: 720px) {
+  .portfolio-fund-row .fund-alloc,
+  .compare-fund-row .fund-alloc {
+    width: 120px;
+  }
+  .date-field input {
+    width: 100px;
+  }
+}
