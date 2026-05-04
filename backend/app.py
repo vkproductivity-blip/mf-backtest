@@ -1229,11 +1229,11 @@ def api_analyze_correlation(req: AnalysisRequest):
                 "strong_negative": "Correlation < -0.7",
             }
         }
-        
-   except ValueError as e:
-       raise HTTPException(status_code=400, detail=str(e))
-   except Exception as e:
-       raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 class CompareFundDetail(BaseModel):
